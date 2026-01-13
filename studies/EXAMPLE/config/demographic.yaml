@@ -1,0 +1,61 @@
+# Example Study - Demographic Entity Mapping Configuration
+#
+# Target Entity: Demographic (PCGL Base Schema)
+# Source: Example CSV export
+# Pattern: Direct mapping
+
+entity:
+  name: Demographic
+  fields:
+    base:
+      - submitter_participant_id
+      - age_at_enrollment
+      - vital_status
+      - cause_of_death
+      - age_at_death
+  pattern: direct
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Participant Identifier
+  # Links to Participant entity
+  # ---------------------------------------------------------------------------
+  - source_field: participant_id
+    target_field: submitter_participant_id
+    source_label: "Participant ID"
+  
+  # ---------------------------------------------------------------------------
+  # Age at Enrollment
+  # Source: age_years converted to days
+  # ---------------------------------------------------------------------------
+  - source_field: age_years
+    target_field: age_at_enrollment
+    source_label: "Age in years"
+    target_type: age
+    params:
+      birth_date_field: dob
+      event_date_field: enrollment_date
+      age_fallback_field: age_years
+  
+  # ---------------------------------------------------------------------------
+  # Vital Status
+  # Source: vital_status field with value mappings
+  # ---------------------------------------------------------------------------
+  - source_field: vital_status
+    target_field: vital_status
+    source_label: "Vital status"
+
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  eligible_participants: true
+  participant_eligibility:
+    - field: consent
+      operator: equals
+      value: 1
+  include_rows:
+    baseline: true
+    repeat_instruments: []
+  participant_id_field: "participant_id"

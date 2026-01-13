@@ -1,0 +1,65 @@
+# Example Study - Medication Entity Mapping Configuration
+#
+# Target Entity: Medication (child of Treatment entity)
+# Source: Example CSV export
+# Pattern: Direct mapping (from free-text fields)
+
+entity:
+  name: Medication
+  code_term_prefix: drug
+  fields:
+    base:
+      - submitter_treatment_id
+      - drug_code
+      - drug_term
+      - drug_dose_units
+      - prescribed_cumulative_drug_dose
+      - actual_cumulative_drug_dose
+    extension:
+      - drug_source_text
+  pattern: expansion
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Treatment Identifier
+  # Format: {participant_id}_treatment_{seq}
+  # ---------------------------------------------------------------------------
+  - target_field: submitter_treatment_id
+    target_type: identifier
+    params:
+      prefix_field: participant_id
+      type: treatment
+      suffix_fields: [source_field_name]
+
+configs:
+  # ---------------------------------------------------------------------------
+  # Drug Term
+  # Source: medication_name (free text)
+  # ---------------------------------------------------------------------------
+  - source_field: medication_aspirin
+    code: "rxnorm:1191"
+    term: "Aspirin"
+    enrichments:
+      - source_field: medication_aspirin_dose
+        target_field: prescribed_cumulative_drug_dose
+      - source_field: medication_aspirin_dose
+        target_field: actual_cumulative_drug_dose
+      - source_field: medication_aspirin_dose_units
+        target_field: drug_dose_units
+        value_mappings:
+          "mg": "UO:0000022"
+
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  eligible_participants: true
+  participant_eligibility:
+    - field: consent
+      operator: equals
+      value: 1
+  include_rows:
+    baseline: true
+    repeat_instruments: []
+  participant_id_field: "participant_id"
