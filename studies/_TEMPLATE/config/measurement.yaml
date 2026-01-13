@@ -1,0 +1,261 @@
+# Measurement Entity Configuration Template
+#
+# This template demonstrates DIRECT MAPPING with various field types.
+# Use this for one-to-one mapping where each source row creates one output record.
+
+entity:
+  name: Measurement  
+  
+  fields:
+    base:
+      - submitter_participant_id
+      - age_at_measurement
+      - measurement_code
+      - measurement_term
+      - measurement_result_numeric
+      - measurement_unit
+      - measurement_result_categorical
+
+    # optionally include extension fields
+    extension:
+      # Template: Add any extension fields needed for your study
+      # - submitter_measurement_id
+      # - measurement_source_text
+      # - measurement_note
+      # ADD MORE EXTENSION FIELDS HERE 
+  
+  pattern: expansion # IMPORTANT: Use expansion for checkbox → multiple records conversion    
+  # Optional: Use custom pattern for advanced transformations instead of checkbox logic
+  # pattern: custom
+  # function: your_custom_expansion_function
+  
+  # Parameters for expansion pattern
+  params:
+    participant_id_field: participant_id  # CUSTOMIZE: Your participant ID field
+    skip_values: [0, null]  # Skip unchecked checkboxes and null values
+
+# Optional preprocessing steps before mapping
+preprocessing:
+  # Template: 
+  # - type: clean_numeric/strip_whitespace/...
+  #   fields: []  # CUSTOMIZE
+  # ADD MORE PREPROCESSING STEPS HERE
+
+# Optional filters to apply before mapping
+filters: 
+  # Template:
+  # participant_id_field: participant_id  # CUSTOMIZE
+  # eligible_participants: true
+  # include_rows:
+  #   baseline: true
+  #   repeat_instruments: []
+  # field_filters:
+  #   - field: source_field_name
+  #     operator: equals/not_equals/greater_than/...
+  #     value: some_value
+  # ADD MORE FILTERS HERE
+
+# These create the default mapping logic for each field in a mapped record
+mappings:
+  # CUSTOMIZE: Add entries for each field in the mapped record 
+  # Template:
+  # - target_field: your_target_field
+  #   target_type: value/age/identifier/...
+  #   source_field: null  # CUSTOMIZE
+  #   source_label: null  # CUSTOMIZE
+  #   params: {}  # CUSTOMIZE if needed
+  #   value_mappings: {}  # CUSTOMIZE if needed
+  #   default_value: null  # CUSTOMIZE if needed
+  # ADD MORE FIELD MAPPING HERE
+
+# These create the record specific mapping logic
+configs:
+  # CUSTOMIZE: Add entries for each checkbox in your data  
+  # Template:
+  # - source_field: your_checkbox_field
+  #   code: "XXX:XXXXXXX"
+  #   term: "Label from the ontology"
+  #   source_label: "Label from source"
+      # Optional: Add enrichments to populate additional fields
+      # enrichments:
+        # - target_field: additional_field_name
+        #   source_type: radio
+        #   source_field: source_field_name
+        #   value_mappings:
+        #     1: "Type 1 ..."
+        #     2: "Type 2 ..."
+        # ADD MORE ENRICHMENTS AS NEEDED
+  # ADD MORE CHECKBOXES HERE   
+
+# Optional Validations
+validations:
+  # CUSTOMIZE: Add validation rules as needed
+  # Template:
+  # - type: your_validation_type
+  #   field: your_field_name
+  # ADD MORE VALIDATIONS HERE
+
+# Optional Post-processing
+post_processing:
+  # CUSTOMIZE: Add post-processing steps as needed
+  # Template:
+  # - type: your_post_processing_type
+  #   columns: []  # CUSTOMIZE
+  # ADD MORE POST-PROCESSING STEPS HERE
+preprocessing:
+  - type: clean_numeric
+    fields:
+      - measurement_value
+  
+  - type: strip_whitespace
+    fields:
+      - measurement_unit
+      - measurement_method
+
+filters:
+  # Example: Only include valid measurements
+  field_filters:
+    - field: measurement_value
+      operator: is_not_null
+  
+  participant_id_field: participant_id
+
+mappings:
+  # ============================================================================
+  # IDENTIFIERS
+  # ============================================================================
+  
+  - target_field: submitter_measurement_id
+    target_type: identifier
+    params:
+      prefix: "{studyname}"  # CUSTOMIZE
+      type: "measurement"
+      suffix_fields:
+        - participant_id
+        - measurement_type_code
+  
+  - target_field: program_id
+    target_type: value
+    default_value: "PCGL"
+  
+  - target_field: submitter_participant_id
+    target_type: identifier
+    params:
+      prefix: "{studyname}"
+      type: "participant"
+      suffix_fields:
+        - participant_id
+  
+  # ============================================================================
+  # AGE
+  # ============================================================================
+  
+  - target_field: age_at_measurement
+    target_type: age
+    params:
+      birth_date_field: date_of_birth  # CUSTOMIZE
+      event_date_field: measurement_date_raw  # CUSTOMIZE
+      age_fallback_field: age_at_measurement_years  # CUSTOMIZE
+  
+  # ============================================================================
+  # MEASUREMENT DETAILS
+  # ============================================================================
+  
+  # Example: Direct value mapping
+  - target_field: measurement_type
+    target_type: value
+    source_field: measurement_type_code  # CUSTOMIZE
+    value_mappings:
+      1: "Height"
+      2: "Weight"
+      3: "BMI"
+      4: "Blood Pressure"
+      # CUSTOMIZE: Add your value mappings
+  
+  # Example: Direct copy (no mapping)
+  - target_field: measurement_value
+    target_type: value
+    source_field: value_numeric  # CUSTOMIZE
+  
+  # Example: Unit mapping
+  - target_field: measurement_unit
+    target_type: value
+    source_field: unit_code  # CUSTOMIZE
+    value_mappings:
+      1: "cm"
+      2: "kg"
+      3: "kg/m²"
+      4: "mmHg"
+      # CUSTOMIZE
+  
+  # ============================================================================
+  # DATE HANDLING
+  # ============================================================================
+  
+  # Example: Format date to PCGL standard (YYYY-MM-DD)
+  - target_field: measurement_date
+    target_type: date
+    source_field: measurement_date_raw  # CUSTOMIZE
+  
+  # ============================================================================
+  # TEXT FIELDS
+  # ============================================================================
+  
+  - target_field: measurement_method
+    target_type: value
+    source_field: method_description  # CUSTOMIZE
+  
+  - target_field: measurement_source_text
+    target_type: value
+    source_field: original_label  # CUSTOMIZE
+  
+  # ============================================================================
+  # ADVANCED: INTEGER WITH MAPPING
+  # ============================================================================
+  
+  # Example: Convert coded value to integer
+  # - target_field: measurement_quality_score
+  #   target_type: integer
+  #   source_field: quality_code
+  #   value_mappings:
+  #     "High": 3
+  #     "Medium": 2
+  #     "Low": 1
+  #   default_value: null
+  
+  # ============================================================================
+  # ADVANCED: NOTE AGGREGATION
+  # ============================================================================
+  
+  # Example: Combine multiple fields into note
+  # - target_field: measurement_note
+  #   target_type: note
+  #   source_field:
+  #     - measurement_notes
+  #     - quality_notes
+  #     - technician_notes
+
+validations:
+  - type: required
+    field: submitter_measurement_id
+  
+  - type: required
+    field: submitter_participant_id
+  
+  - type: participant_id
+    field: submitter_participant_id
+  
+  # Example: Age range validation
+  # - type: age_range
+  #   field: age_at_measurement
+  #   min_age: 0
+  #   max_age: 43800
+
+post_processing:
+  - type: convert_nullable_int
+    columns: auto
+  
+  # Example: Filter out invalid measurements in post-processing
+  # - type: filter_records
+  #   field: measurement_value
+  #   operator: is_not_null
