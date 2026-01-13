@@ -1,0 +1,5 @@
+submitter_participant_id,submitter_diagnosis_id,age_at_diagnosis,disease_code,disease_term,diagnosis_date
+P001,P001_diagnosis,12838,icd10:U07.1,"COVID-19, virus identified",2020-05-08
+P002,P002_diagnosis,10187,icd10:U07.1,"COVID-19, virus identified",2020-06-12
+P003,P003_diagnosis,15137,icd10:U07.1,"COVID-19, virus identified",2020-04-18
+P005,P005_diagnosis,11576,icd10:U07.1,"COVID-19, virus identified",2020-05-23

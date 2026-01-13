@@ -1,0 +1,89 @@
+# Example Study - Sample Entity Mapping Configuration
+#
+# Target Entity: Sample (PCGL Base Schema)
+# Source: Example CSV export
+# Pattern: Direct mapping
+
+entity:
+  name: Sample
+  schema: [base]
+  fields:
+    base:
+      - submitter_sample_id
+      - submitter_specimen_id
+      - molecule_type_code
+      - molecule_type_term
+      - sample_status
+
+  pattern: direct
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Sample Identifier
+  # Source: sample_id
+  # ---------------------------------------------------------------------------
+  - source_field: sample_id
+    target_field: submitter_sample_id
+    source_label: "Sample ID"
+    target_type: identifier
+    params:
+      prefix_field: participant_id
+      type: sample
+      suffix_fields: [sample_id]
+  
+  # ---------------------------------------------------------------------------
+  # Specimen Identifier
+  # Links sample to parent specimen record
+  # Format: {participant_id}_specimen_{sample_id}
+  # ---------------------------------------------------------------------------
+  - source_field: participant_id
+    target_field: submitter_specimen_id
+    target_type: identifier
+    params:
+      prefix_field: participant_id
+      type: specimen
+      suffix_fields: [sample_id]
+  
+  # ---------------------------------------------------------------------------
+  # Molecule Type Code
+  # Default: Genomic DNA (SO:0000991)
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: molecule_type_code
+    source_label: null
+    default_value: "SO:0000991"
+  
+  # ---------------------------------------------------------------------------
+  # Molecule Type Term
+  # Default: Genomic DNA
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: molecule_type_term
+    source_label: null
+    default_value: "Genomic DNA"
+  
+  # ---------------------------------------------------------------------------
+  # Sample Status
+  # Default: Case
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: sample_status
+    source_label: null
+    default_value: "Case"
+  
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  eligible_participants: true
+  participant_eligibility:
+    - field: consent
+      operator: equals
+      value: 1
+  include_rows:
+    baseline: true
+    repeat_instruments: []
+  field_filters:
+    - field: sample_id
+      operator: is_not_null
+  participant_id_field: "participant_id"

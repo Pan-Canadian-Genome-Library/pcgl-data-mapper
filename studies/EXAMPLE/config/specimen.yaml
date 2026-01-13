@@ -1,0 +1,116 @@
+# Example Study - Specimen Entity Mapping Configuration
+#
+# Target Entity: Specimen (PCGL Base Schema)
+# Source: Example CSV export
+# Pattern: Direct mapping
+
+entity:
+  name: Specimen
+  fields:
+    base:
+      - submitter_participant_id
+      - submitter_specimen_id
+      - specimen_tissue_source_code
+      - specimen_tissue_source_term
+      - specimen_storage
+      - specimen_processing
+      - age_at_specimen_collection
+      - specimen_anatomic_location_code
+      - specimen_anatomic_location_term
+      - specimen_laterality
+    extension:
+      - specimen_source_text
+      - collection_date
+  pattern: direct
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Participant Identifier
+  # Source: participant_id
+  # ---------------------------------------------------------------------------
+  - source_field: participant_id
+    target_field: submitter_participant_id
+    source_label: "Participant ID"
+  
+  # ---------------------------------------------------------------------------
+  # Specimen Identifier
+  # Format: {participant_id}_specimen_{sample_id}
+  # ---------------------------------------------------------------------------
+  - source_field: participant_id
+    target_field: submitter_specimen_id
+    source_label: null
+    target_type: identifier
+    params:
+      prefix_field: participant_id
+      type: specimen
+      suffix_fields: [sample_id]
+  
+  # ---------------------------------------------------------------------------
+  # Tissue Source Term
+  # Source: specimen_type (free text)
+  # ---------------------------------------------------------------------------
+  - source_field: specimen_type
+    target_field: specimen_tissue_source_code
+    source_label: "Specimen type"
+    value_mappings:
+      "Blood": "NCIT:C12434"
+      "Saliva": "NCIT:C13275"
+
+  - source_field: specimen_type
+    target_field: specimen_tissue_source_term
+    source_label: "Specimen type"
+  
+  # ---------------------------------------------------------------------------
+  # Specimen Source Text
+  # Source: specimen_type (free text)
+  # ---------------------------------------------------------------------------
+  - source_field: specimen_type
+    target_field: specimen_source_text
+    source_label: "Specimen type"
+  
+  # ---------------------------------------------------------------------------
+  # Age at Collection
+  # Calculated from dob and collection_date
+  # ---------------------------------------------------------------------------
+  - source_field: collection_date
+    target_field: age_at_specimen_collection
+    source_label: "Collection date"
+    target_type: age
+    params:
+      birth_date_field: dob
+      event_date_field: collection_date
+
+  
+  # ---------------------------------------------------------------------------
+  # Collection Date
+  # Source: collection_date
+  # ---------------------------------------------------------------------------
+  - source_field: collection_date
+    target_field: collection_date
+    source_label: "Collection date"
+    target_type: date
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  include_rows:
+    - field: sample_id
+      condition: not_empty
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  eligible_participants: true
+  participant_eligibility:
+    - field: consent
+      operator: equals
+      value: 1
+  include_rows:
+    baseline: true
+    repeat_instruments: []
+  field_filters:
+    - field: sample_id
+      operator: is_not_null
+  participant_id_field: "participant_id"

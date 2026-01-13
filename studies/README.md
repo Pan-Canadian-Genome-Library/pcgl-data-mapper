@@ -27,6 +27,21 @@ YourStudyName/
 
 ## Example Studies
 
+### EXAMPLE
+Simple working example for testing and learning:
+- 10 entity configs with straightforward field mappings
+- Uses `data/source/EXAMPLE.csv` as input data
+- Demonstrates both direct and expansion mapping patterns
+- No custom code required - pure YAML configuration
+- Ideal for first-time users to understand the tool
+
+Run it with:
+```bash
+python prototype_mapper.py --study_id EXAMPLE --input_csv data/source/EXAMPLE.csv --output_dir data/mapped/EXAMPLE/
+```
+
+See `EXAMPLE/config/*.yaml` for basic configuration patterns.
+
 ### _TEMPLATE
 Starting template for new studies with:
 - Pre-configured YAML files for all 13 standard entities

@@ -1,0 +1,5 @@
+submitter_treatment_id,drug_code,drug_term,drug_dose_units,prescribed_cumulative_drug_dose,actual_cumulative_drug_dose,drug_source_text
+P001_treatment_medication_aspirin,rxnorm:1191,Aspirin,UO:0000022,100.0,100.0,
+P002_treatment_medication_aspirin,rxnorm:1191,Aspirin,UO:0000022,500.0,500.0,
+P003_treatment_medication_aspirin,rxnorm:1191,Aspirin,UO:0000022,10.0,10.0,
+P005_treatment_medication_aspirin,rxnorm:1191,Aspirin,UO:0000022,90.0,90.0,

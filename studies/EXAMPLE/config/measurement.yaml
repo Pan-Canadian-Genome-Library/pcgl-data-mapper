@@ -1,0 +1,86 @@
+# Example Study - Measurement Entity Mapping Configuration
+#
+# Target Entity: Measurement (PCGL Base Schema)
+# Source: Example CSV export
+# Pattern: Direct mapping (laboratory results)
+
+entity:
+  name: Measurement
+  fields:
+    base:
+      - submitter_participant_id
+      - age_at_measurement
+      - measurement_code
+      - measurement_term
+      - measurement_result_numeric
+      - measurement_unit
+      - measurement_result_categorical
+    extension:
+      - submitter_measurement_id
+      - measurement_source_text
+      - measurement_unit_source_text
+  pattern: expansion
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Participant Identifier
+  # ---------------------------------------------------------------------------
+  - source_field: participant_id
+    target_field: submitter_participant_id
+    source_label: "Participant ID"
+
+  # ---------------------------------------------------------------------------
+  # Measurement Identifier
+  # Format: {participant_id}_measurement_{seq}
+  # ---------------------------------------------------------------------------
+  - source_field: participant_id
+    target_field: submitter_measurement_id
+    target_type: identifier
+    source_label: null
+    params:
+      prefix_field: participant_id
+      type: measurement
+      suffix_fields: [source_field_name,redcap_repeat_instance]
+  
+  # ---------------------------------------------------------------------------
+  # Age at Measurement
+  # Calculated from dob and collection_date
+  # ---------------------------------------------------------------------------
+  - source_field: collection_date
+    target_field: age_at_measurement
+    target_type: age
+    source_label: "Collection date"
+    params:
+      birth_date_field: dob
+      event_date_field: collection_date
+
+configs:  
+  - source_field: lab_creatinine
+    code: "LOINC:2160-0"
+    term: "Creatinine [Mass/volume] in Serum or Plasma"
+    source_label: "Creatinine"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_value
+        target_type: float
+      - target_field: [measurement_unit, measurement_unit_source_text]
+        source_field: lab_units
+        value_mappings:
+          'mg/dL': ["UCUM:mg/dL", "mg/dL"]
+          'umol/L': ["UCUM:umol/L", "umol/L"]
+
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  eligible_participants: true
+  participant_eligibility:
+    - field: consent
+      operator: equals
+      value: 1
+  include_rows:
+    baseline: true
+    repeat_instruments: ["lab_results"]
+  merge_baseline_fields: [dob]
+  participant_id_field: "participant_id"

@@ -1,0 +1,79 @@
+# Example Study - Comorbidity Entity Mapping Configuration
+#
+# Target Entity: Comorbidity (PCGL Base Schema)
+# Source: Example CSV export
+# Pattern: Expansion - Wide-to-long conversion (binary fields → multiple records)
+
+entity:
+  name: Comorbidity
+  fields:
+    base:
+      - submitter_participant_id
+      - age_at_comorbidity_diagnosis
+      - comorbidity_code
+      - comorbidity_term
+      - comorbidity_treatment_status
+      - comorbidity_status
+    extension:
+      - submitter_comorbidity_id
+  pattern: expansion
+  params:
+    selection_type: radio
+    skip_values: [0]  # Skip No (0); include Yes (1)
+    
+mappings:
+  # ---------------------------------------------------------------------------
+  # Comorbidity Record Expansion
+  # Converts comorbidity binary fields into N records per participant
+  # ---------------------------------------------------------------------------
+  - source_field: participant_id
+    target_field: submitter_participant_id
+    source_label: "Participant ID"
+    
+  - target_field: submitter_comorbidity_id
+    target_type: identifier
+    source_label: null
+    params:
+      prefix_field: participant_id
+      type: comorbidity
+      suffix_fields: [source_field_name]
+
+  - target_field: comorbidity_status
+    source_type: radio
+    value_mappings:
+      1: "Active"
+
+# Each binary field maps to specific ontology code and term
+configs:
+  # =====================================================================
+  # Comorbidities
+  # =====================================================================
+  - source_field: comorbidity_diabetes
+    code: "MONDO:0005015"
+    term: "Diabetes mellitus"
+    source_label: "Diabetes"
+  
+  - source_field: comorbidity_hypertension
+    code: "MONDO:0005044"
+    term: "Hypertension"
+    source_label: "Hypertension"
+  
+  - source_field: comorbidity_asthma
+    code: "MONDO:0004979"
+    term: "Asthma"
+    source_label: "Asthma"
+
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  eligible_participants: true
+  participant_eligibility:
+    - field: consent
+      operator: equals
+      value: 1
+  include_rows:
+    baseline: true
+    repeat_instruments: []
+  participant_id_field: "participant_id"
