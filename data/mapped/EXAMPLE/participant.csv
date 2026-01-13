@@ -1,0 +1,6 @@
+study_id,submitter_participant_id,duo_permission,duo_modifier,disease_specific_modifier
+EXAMPLE,P001,DUO:0000006 (health or medical or biomedical research),DUO:0000021 (ethics approval required); DUO:0000027 (project specific restriction); DUO:0000028 (institution specific restriction),
+EXAMPLE,P002,DUO:0000006 (health or medical or biomedical research),DUO:0000021 (ethics approval required); DUO:0000027 (project specific restriction); DUO:0000028 (institution specific restriction),
+EXAMPLE,P003,DUO:0000006 (health or medical or biomedical research),DUO:0000021 (ethics approval required); DUO:0000027 (project specific restriction); DUO:0000028 (institution specific restriction),
+EXAMPLE,P004,DUO:0000006 (health or medical or biomedical research),DUO:0000021 (ethics approval required); DUO:0000027 (project specific restriction); DUO:0000028 (institution specific restriction),
+EXAMPLE,P005,DUO:0000006 (health or medical or biomedical research),DUO:0000021 (ethics approval required); DUO:0000027 (project specific restriction); DUO:0000028 (institution specific restriction),

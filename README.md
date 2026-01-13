@@ -19,7 +19,7 @@ pip install -r requirements.txt
 - **Source CSV file** - Your study's raw data (e.g., REDCap export, database dump)
   - Typically located in `data/source/` directory
   - Can be any CSV with column headers
-  - Example: `data/source/_DUMMY_EXAMPLE.csv`
+  - Example: `data/source/EXAMPLE.csv`
 
 **Output:**
 - **Mapped CSV files** - One file per entity, written to specified output directory
@@ -32,13 +32,16 @@ pip install -r requirements.txt
 ## Quick Start
 
 ```bash
-# Copy template
+# Try the EXAMPLE study first
+python prototype_mapper.py --study_id EXAMPLE --input_csv data/source/EXAMPLE.csv --output_dir data/mapped/EXAMPLE/
+
+# Create your own study from template
 cp -r studies/_TEMPLATE studies/MyStudy
 
 # Edit YAML configs in studies/MyStudy/config/
 
-# Run data mapper
-python prototype_mapper.py --study_id <MyStudy> --input_csv <data/source/your_data.csv> --output_dir <data/mapped/MyStudy/>
+# Run your data mapper
+python prototype_mapper.py --study_id MyStudy --input_csv data/source/your_data.csv --output_dir data/mapped/MyStudy/
 ```
 
 ## Project Structure
@@ -46,7 +49,8 @@ python prototype_mapper.py --study_id <MyStudy> --input_csv <data/source/your_da
 ```
 data_mapper/
 ├── studies/
-│   ├── _TEMPLATE/          # Starting point for new studies
+│   ├── EXAMPLE/           # Simple working example for testing
+│   ├── _TEMPLATE/         # Starting point for new studies
 │   ├── HostSeq/           # Production example (15 entities)
 │   └── YourStudy/
 │       ├── config/        # YAML entity configs (required)
@@ -57,6 +61,11 @@ data_mapper/
 │           ├── __init__.py
 │           └── transforms.py
 ├── core/                  # Framework code (generic, reusable)
+├── data/
+│   ├── source/            # Input CSV files
+│   │   └── EXAMPLE.csv    # Example input data
+│   └── mapped/            # Output directory
+│       └── EXAMPLE/       # Example output
 └── prototype_mapper.py    # Main script
 ```
 
@@ -222,13 +231,20 @@ Run with verbose logging: check `prototype_mapper.log` for details.
 
 ## Examples
 
+**EXAMPLE study** - Simple working example for testing and learning
+- 10 entity configs with straightforward mappings
+- Uses `data/source/EXAMPLE.csv` as input
+- Direct mapping entities: participant, demographic, specimen, sample, diagnosis, sociodemographic
+- Expansion mapping entities: comorbidity, medication, treatment, measurement
+- See `studies/EXAMPLE/config/*.yaml` for basic configuration patterns
+- Run with: `python prototype_mapper.py --study_id EXAMPLE --input_csv data/source/EXAMPLE.csv --output_dir data/mapped/EXAMPLE/`
+
 **HostSeq study** - Complete production example with 15 entities (13 base + 2 extension)
 - Direct mapping entities: participant, demographic, specimen, sample, diagnosis, sociodemographic, demographic, hla
 - Expansion mapping entities: comorbidity, medication, treatment, phenotype, procedure, measurement
 - Custom expansion mapping entities: household
 - Custom code: eligibility filtering, birth date construction, household expansion
-
-See `studies/HostSeq/config/*.yaml` for working configs.
+- See `studies/HostSeq/config/*.yaml` for advanced working configs
 
 **_TEMPLATE** - Starting point for new studies with pre-configured YAML files and inline documentation.
 

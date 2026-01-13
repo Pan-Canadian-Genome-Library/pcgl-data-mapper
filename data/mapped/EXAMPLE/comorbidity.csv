@@ -1,0 +1,8 @@
+submitter_participant_id,age_at_comorbidity_diagnosis,comorbidity_code,comorbidity_term,comorbidity_treatment_status,comorbidity_status,submitter_comorbidity_id
+P001,,MONDO:0005044,Hypertension,,Active,P001_comorbidity_comorbidity_hypertension
+P002,,MONDO:0005015,Diabetes mellitus,,Active,P002_comorbidity_comorbidity_diabetes
+P002,,MONDO:0004979,Asthma,,Active,P002_comorbidity_comorbidity_asthma
+P003,,MONDO:0005015,Diabetes mellitus,,Active,P003_comorbidity_comorbidity_diabetes
+P003,,MONDO:0005044,Hypertension,,Active,P003_comorbidity_comorbidity_hypertension
+P004,,MONDO:0005044,Hypertension,,Active,P004_comorbidity_comorbidity_hypertension
+P004,,MONDO:0004979,Asthma,,Active,P004_comorbidity_comorbidity_asthma
