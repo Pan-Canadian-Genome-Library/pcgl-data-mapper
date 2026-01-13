@@ -1,0 +1,71 @@
+# Demographic Entity Configuration Template
+#
+# PCGL Base Schema: Demographic
+# All base fields are pre-defined below - customize source_field and source_label for your study
+
+entity:
+  name: Demographic
+  
+  fields:
+    base:
+      - submitter_participant_id
+      - age_at_enrollment
+      - vital_status
+      - cause_of_death
+      - age_at_death
+    # optionally include extension fields
+    # extension:
+      # Template: Add any extension fields needed for your study
+      # - ... add extension fields here ...
+
+  pattern: direct
+
+# Optional preprocessing steps before mapping
+preprocessing:
+  # Template: 
+  # - type: clean_numeric/strip_whitespace/...
+  #   fields: []  # CUSTOMIZE
+  # ADD MORE PREPROCESSING STEPS HERE
+
+# Optional filters to apply before mapping
+filters: 
+  # Template:
+  # participant_id_field: participant_id  # CUSTOMIZE
+  # eligible_participants: true
+  # include_rows:
+  #   baseline: true
+  #   repeat_instruments: []
+  # field_filters:
+  #   - field: source_field_name
+  #     operator: equals/not_equals/greater_than/...
+  #     value: some_value
+  # ADD MORE FILTERS HERE
+
+# These create the default mapping logic for each field in a mapped record
+mappings:
+  # CUSTOMIZE: Add entries for each field in the mapped record 
+  # Template:
+  # - target_field: your_target_field
+  #   target_type: value/age/identifier/...
+  #   source_field: null  # CUSTOMIZE
+  #   source_label: null  # CUSTOMIZE
+  #   params: {}  # CUSTOMIZE if needed
+  #   value_mappings: {}  # CUSTOMIZE if needed
+  #   default_value: null  # CUSTOMIZE if needed
+  # ADD MORE FIELD MAPPING HERE
+
+# Optional Validations
+validations:
+  # CUSTOMIZE: Add validation rules as needed
+  # Template:
+  # - type: your_validation_type
+  #   field: your_field_name
+  # ADD MORE VALIDATIONS HERE
+
+# Optional Post-processing
+post_processing:
+  # CUSTOMIZE: Add post-processing steps as needed
+  # Template:
+  # - type: your_post_processing_type
+  #   columns: []  # CUSTOMIZE
+  # ADD MORE POST-PROCESSING STEPS HERE
