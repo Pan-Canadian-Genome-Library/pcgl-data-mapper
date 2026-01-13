@@ -6,8 +6,8 @@ YAML-driven framework for mapping research data to PCGL schema. Most studies nee
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd data_mapper
+git clone git@github.com:Pan-Canadian-Genome-Library/pcgl-data-mapper.git
+cd pcgl-data-mapper
 
 # Install dependencies
 pip install -r requirements.txt
@@ -37,8 +37,8 @@ cp -r studies/_TEMPLATE studies/MyStudy
 
 # Edit YAML configs in studies/MyStudy/config/
 
-# Run mapper
-python prototype_mapper.py MyStudy data/source/your_data.csv data/mapped/MyStudy/
+# Run data mapper
+python prototype_mapper.py --study_id <MyStudy> --input_csv <data/source/your_data.csv> --output_dir <data/mapped/MyStudy/>
 ```
 
 ## Project Structure

@@ -1,0 +1,10 @@
+participant_id,dob,enrollment_date,sex,race,ethnicity,vital_status,age_years,consent,suspected_covid,test_result,diagnosis_date,diagnosis_code,comorbidity_diabetes,comorbidity_hypertension,comorbidity_asthma,medication_name,medication_dose,sample_id,sample_type,specimen_type,collection_date,lab_value,lab_units,redcap_repeat_instrument,redcap_repeat_instance
+P001,1985-03-15,2020-05-10,Male,White,Not Hispanic or Latino,Alive,35,1,1,1,2020-05-08,U07.1,0,1,0,Aspirin,100mg,S001,Blood,Whole Blood,2020-05-10,95.5,mg/dL,,
+P002,1992-07-22,2020-06-15,Female,Asian,Not Hispanic or Latino,Alive,28,1,1,2,2020-06-12,U07.1,1,0,1,Metformin,500mg,S002,Blood,Plasma,2020-06-15,120.3,mg/dL,,
+P003,1978-11-08,2020-04-20,Male,Black or African American,Hispanic or Latino,Deceased,42,1,1,1,2020-04-18,U07.1,1,1,0,Lisinopril,10mg,S003,Swab,Nasal,2020-04-20,88.7,mg/dL,,
+P004,1965-02-28,2020-07-05,Female,White,Not Hispanic or Latino,Alive,55,1,0,0,,,0,1,1,,,S004,Blood,Serum,2020-07-05,102.1,mg/dL,,
+P005,1988-09-12,2020-05-25,Male,Other,Not Hispanic or Latino,Alive,32,1,1,1,2020-05-23,U07.1,0,0,0,Albuterol,90mcg,S005,Swab,Throat,2020-05-25,78.9,mg/dL,,
+P001,1985-03-15,,,,,,,,,,,,,,,,,S006,Blood,Whole Blood,2020-05-17,110.2,mg/dL,lab_results,1
+P001,1985-03-15,,,,,,,,,,,,,,,,,S007,Blood,Whole Blood,2020-05-24,105.8,mg/dL,lab_results,2
+P002,1992-07-22,,,,,,,,,,,,,,,,,S008,Blood,Plasma,2020-06-22,125.7,mg/dL,lab_results,1
+P003,1978-11-08,,,,,,,,,,,,,,,,,S009,Swab,Nasal,2020-04-27,92.3,mg/dL,lab_results,1
