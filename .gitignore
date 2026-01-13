@@ -41,6 +41,7 @@ htmlcov/
 
 # Data (exclude actual data files)
 data/source/*.csv
+!data/source/_DUMMY_EXAMPLE.csv
 data/mapped/*.csv
 data/reports/*.html
 data/reports/*.json
