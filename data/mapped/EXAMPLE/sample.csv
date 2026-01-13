@@ -1,0 +1,6 @@
+submitter_sample_id,submitter_specimen_id,molecule_type_code,molecule_type_term,sample_status
+P001_sample_S001,P001_specimen_S001,SO:0000991,Genomic DNA,Case
+P002_sample_S002,P002_specimen_S002,SO:0000991,Genomic DNA,Case
+P003_sample_S003,P003_specimen_S003,SO:0000991,Genomic DNA,Case
+P004_sample_S004,P004_specimen_S004,SO:0000991,Genomic DNA,Case
+P005_sample_S005,P005_specimen_S005,SO:0000991,Genomic DNA,Case

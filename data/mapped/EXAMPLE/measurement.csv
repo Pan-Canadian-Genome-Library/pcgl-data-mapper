@@ -1,0 +1,10 @@
+submitter_participant_id,age_at_measurement,measurement_code,measurement_term,measurement_result_numeric,measurement_unit,measurement_result_categorical,submitter_measurement_id,measurement_source_text,measurement_unit_source_text
+P001,12840,LOINC:2160-0,Creatinine [Mass/volume] in Serum or Plasma,95.5,UCUM:mg/dL,,P001_measurement_participant_id,Creatinine,mg/dL
+P002,10190,LOINC:2160-0,Creatinine [Mass/volume] in Serum or Plasma,120.3,UCUM:mg/dL,,P002_measurement_participant_id,Creatinine,mg/dL
+P003,15139,LOINC:2160-0,Creatinine [Mass/volume] in Serum or Plasma,88.7,UCUM:mg/dL,,P003_measurement_participant_id,Creatinine,mg/dL
+P004,20216,LOINC:2160-0,Creatinine [Mass/volume] in Serum or Plasma,102.1,UCUM:mg/dL,,P004_measurement_participant_id,Creatinine,mg/dL
+P005,11578,LOINC:2160-0,Creatinine [Mass/volume] in Serum or Plasma,78.9,UCUM:mg/dL,,P005_measurement_participant_id,Creatinine,mg/dL
+P001,12847,LOINC:2160-0,Creatinine [Mass/volume] in Serum or Plasma,110.2,UCUM:mg/dL,,P001_measurement_participant_id_1.0,Creatinine,mg/dL
+P001,12854,LOINC:2160-0,Creatinine [Mass/volume] in Serum or Plasma,105.8,UCUM:mg/dL,,P001_measurement_participant_id_2.0,Creatinine,mg/dL
+P002,10197,LOINC:2160-0,Creatinine [Mass/volume] in Serum or Plasma,125.7,UCUM:mg/dL,,P002_measurement_participant_id_1.0,Creatinine,mg/dL
+P003,15146,LOINC:2160-0,Creatinine [Mass/volume] in Serum or Plasma,92.3,UCUM:mg/dL,,P003_measurement_participant_id_1.0,Creatinine,mg/dL

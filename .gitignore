@@ -41,8 +41,10 @@ htmlcov/
 
 # Data (exclude actual data files)
 data/source/*.csv
-!data/source/_DUMMY_EXAMPLE.csv
-data/mapped/*.csv
+!data/source/EXAMPLE.csv
+data/mapped/*/*.*
+data/mapped/EXAMPLE/*.txt
+!data/mapped/EXAMPLE/*.csv
 data/reports/*.html
 data/reports/*.json
 

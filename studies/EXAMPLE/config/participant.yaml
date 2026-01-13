@@ -1,0 +1,77 @@
+# Example Study - Participant Entity Mapping Configuration
+#
+# Target Entity: Participant (PCGL Base Schema)
+# Source: Example CSV export
+# Pattern: Direct mapping (one participant per source record)
+
+entity:
+  name: Participant
+  schema: [base]
+  fields:
+    base:
+      - study_id
+      - submitter_participant_id
+      - duo_permission
+      - duo_modifier
+      - disease_specific_modifier
+  pattern: direct
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Study Identifier
+  # Default value: EXAMPLE
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: study_id
+    source_label: null
+    default_value: "EXAMPLE"
+  
+  # ---------------------------------------------------------------------------
+  # Participant Identifier
+  # Source: participant_id
+  # ---------------------------------------------------------------------------
+  - source_field: participant_id
+    target_field: submitter_participant_id
+    source_label: "Participant ID"
+  
+  # ---------------------------------------------------------------------------
+  # Data Use Ontology - Permission
+  # Default: Health or medical or biomedical research (DUO:0000006)
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: duo_permission
+    source_label: null
+    default_value: "DUO:0000006 (health or medical or biomedical research)"
+  
+  # ---------------------------------------------------------------------------
+  # Data Use Ontology - Modifiers
+  # Default: Ethics approval, user/project/institution restrictions
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: duo_modifier
+    source_label: null
+    default_value: "DUO:0000021 (ethics approval required); DUO:0000027 (project specific restriction); DUO:0000028 (institution specific restriction)"
+  
+  # ---------------------------------------------------------------------------
+  # Disease Specific Modifier
+  # Default: COVID-19
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: disease_specific_modifier
+    source_label: null
+    default_value: null
+
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  eligible_participants: true
+  participant_eligibility:
+    - field: consent
+      operator: equals
+      value: 1
+  include_rows:
+    baseline: true
+    repeat_instruments: []
+  participant_id_field: "participant_id"

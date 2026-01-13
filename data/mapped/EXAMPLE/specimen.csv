@@ -1,0 +1,6 @@
+submitter_participant_id,submitter_specimen_id,specimen_tissue_source_code,specimen_tissue_source_term,specimen_storage,specimen_processing,age_at_specimen_collection,specimen_anatomic_location_code,specimen_anatomic_location_term,specimen_laterality,specimen_source_text,collection_date
+P001,P001_specimen_S001,NCIT:C12434,Blood,,,12840,,,,Blood,2020-05-10
+P002,P002_specimen_S002,NCIT:C12434,Blood,,,10190,,,,Blood,2020-06-15
+P003,P003_specimen_S003,NCIT:C13275,Saliva,,,15139,,,,Saliva,2020-04-20
+P004,P004_specimen_S004,NCIT:C13275,Saliva,,,20216,,,,Saliva,2020-07-05
+P005,P005_specimen_S005,NCIT:C13275,Saliva,,,11578,,,,Saliva,2020-05-25

@@ -1,0 +1,5 @@
+submitter_participant_id,submitter_treatment_id,treatment_type,submitter_diagnosis_id,age_at_treatment,treatment_duration,treatment_intent,treatment_response,treatment_status,treatment_note
+P001,P001_treatment_medication_aspirin,Medication,P001_diagnosis,,,Missing - Not collected,Missing - Not collected,Missing - Not collected,
+P002,P002_treatment_medication_aspirin,Medication,P002_diagnosis,,,Missing - Not collected,Missing - Not collected,Missing - Not collected,
+P003,P003_treatment_medication_aspirin,Medication,P003_diagnosis,,,Missing - Not collected,Missing - Not collected,Missing - Not collected,
+P005,P005_treatment_medication_aspirin,Medication,P005_diagnosis,,,Missing - Not collected,Missing - Not collected,Missing - Not collected,

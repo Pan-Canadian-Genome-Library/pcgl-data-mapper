@@ -1,0 +1,266 @@
+# Example Study - Sociodemographic Entity Mapping Configuration
+#
+# Target Entity: Sociodemographic (PCGL Base Schema)
+# Source: Example CSV export
+# Pattern: Direct mapping (one sociodemographic record per participant)
+
+entity:
+  name: Sociodemographic
+  schema: [base]
+  fields:
+    base:
+      - submitter_sociodem_id
+      - submitter_participant_id
+      - age_at_sociodem_collection
+      - sociodem_date_collection
+      - race
+      - race_another_racial_category
+      - race_collect_method
+      - gender
+      - gender_another_gender
+      - gender_collect_method
+      - ethnicity
+      - ethnicity_another_category
+      - ethnicity_collect_method
+      - sex_at_birth
+      - sex_another_category
+      - sex_collect_method
+      - education
+      - education_collect_method
+      - personal_income
+      - personal_income_collect_method
+      - geographic_location
+      - geographic_location_additional
+      - geographic_location_collect_method
+      - sociodem_question
+      - sociodem_question_detail
+      - sociodem_notes
+  pattern: direct
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Sociodemographic Identifier
+  # Format: {participant_id}_sociodem
+  # ---------------------------------------------------------------------------
+  - source_field: participant_id
+    target_field: submitter_sociodem_id
+    source_label: null
+    target_type: identifier
+    params:
+      prefix_field: participant_id
+      type: sociodem
+      suffix_fields: null
+  
+  # ---------------------------------------------------------------------------
+  # Participant Identifier
+  # ---------------------------------------------------------------------------
+  - source_field: participant_id
+    target_field: submitter_participant_id
+    source_label: "Participant ID"
+    
+  # ---------------------------------------------------------------------------
+  # Ethnicity
+  # Source: ethnicity field with value mappings
+  # ---------------------------------------------------------------------------
+  - source_field: ethnicity
+    target_field: ethnicity
+    source_label: "Ethnicity"
+    value_mappings:
+      "Not Hispanic or Latino": "Not Hispanic or Latino"
+      "Hispanic or Latino": "Hispanic or Latino"
+  
+  # ---------------------------------------------------------------------------
+  # Sex at Birth
+  # Source: sex field with value mappings
+  # ---------------------------------------------------------------------------
+  - source_field: sex
+    target_field: sex_at_birth
+    source_label: "Sex"
+    value_mappings:
+      "Male": "Male"
+      "Female": "Female"
+
+  # ---------------------------------------------------------------------------
+  # Age at Collection
+  # ---------------------------------------------------------------------------
+  - source_field: age
+    target_field: age_at_sociodem_collection
+    target_type: age
+    source_label: "Source study enrollment date"
+    params:
+      birth_date_field: dob
+      event_date_field: enrollment_date
+      age_fallback_field: age
+  
+  # ---------------------------------------------------------------------------
+  # Collection Date
+  # ---------------------------------------------------------------------------
+  - source_field: enrollment_date
+    target_field: sociodem_date_collection
+    source_label: "Source study enrollment date"
+    target_type: date
+  
+  # ---------------------------------------------------------------------------
+  # Race (Not collected in HostSeq)
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: race
+    source_label: null
+    value_mappings:
+      "White": "White"
+      "Black": "Black"
+      "East Asian": "East Asian"
+      "Latin American": "Latin American"
+  
+  - source_field: null
+    target_field: race_another_racial_category
+    source_label: null
+    default_value: null
+  
+  - source_field: null
+    target_field: race_collect_method
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  # ---------------------------------------------------------------------------
+  # Gender
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: gender
+    source_label: "Gender"
+    default_value: "Missing - Not collected"
+  
+  - source_field: null
+    target_field: gender_another_gender
+    source_label: "Please describe your gender"
+  
+  - source_field: null
+    target_field: gender_collect_method
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  # ---------------------------------------------------------------------------
+  # Ethnicity 
+  # ---------------------------------------------------------------------------
+  - source_field: ethnicity
+    target_field: ethnicity
+    source_label: null
+  
+  - source_field: null
+    target_field: ethnicity_another_category
+    source_label: null
+    default_value: null
+  
+  - source_field: null
+    target_field: ethnicity_collect_method
+    source_label: null
+    default_value: "Self-identified"
+  
+  # ---------------------------------------------------------------------------
+  # Sex at Birth
+  # ---------------------------------------------------------------------------
+  - source_field: sex
+    target_field: sex_at_birth
+    source_label: "Sex at birth"
+    value_mappings:
+      0: "Male"
+      1: "Female"
+      2: "Another Sex"
+    default_value: "Missing - Not provided"
+  
+  - source_field: sex
+    target_field: sex_another_category
+    source_label: "Sex at birth"
+    value_mappings:
+      0: null
+      1: null
+      2: "Not specified"    
+    default_value: null
+  
+  - source_field: null
+    target_field: sex_collect_method
+    source_label: null
+    default_value: "Self-identified"
+  
+  # ---------------------------------------------------------------------------
+  # Education
+  # ---------------------------------------------------------------------------
+  - source_field: education
+    target_field: education
+    source_label: "Education"
+    value_mappings:
+      1: "Elementary school or equivalent"
+      2: "High school (secondary school) diploma or equivalency certificate"
+      3: "College, CEGEP, or other non-university certificate or diploma"
+      4: "Bachelor's degree"
+      5: "Postgraduate degree or other professional designation (e.g., Master's, PhD, MD, DDS, DMD, DVM, OD)"
+      -1: "Missing - Unknown"
+    default_value: "Missing - Not collected"
+  
+  - source_field: null
+    target_field: education_collect_method
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  # ---------------------------------------------------------------------------
+  # Personal Income 
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: personal_income
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  - source_field: null
+    target_field: personal_income_collect_method
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  # ---------------------------------------------------------------------------
+  # Geographic Location 
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: geographic_location
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  - source_field: null
+    target_field: geographic_location_additional
+    source_label: null
+    default_value: null
+  
+  - source_field: null
+    target_field: geographic_location_collect_method
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  # ---------------------------------------------------------------------------
+  # Sociodem Question and Detail
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: sociodem_question
+    source_label: null
+    default_value: "Another question"
+  
+  - target_field: sociodem_question_detail
+    default_value: ["sex", "race", "ethnicity", "age_years"]
+
+  # ---------------------------------------------------------------------------
+  # Sociodem Notes
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: sociodem_notes
+    source_label: null
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  eligible_participants: true
+  participant_eligibility:
+    - field: consent
+      operator: equals
+      value: 1
+  include_rows:
+    baseline: true
+    repeat_instruments: []
+  participant_id_field: "participant_id"

@@ -1,0 +1,94 @@
+# Example Study - Treatment Entity Mapping Configuration
+#
+# Target Entity: Treatment
+# Source: Example CSV export
+# Pattern: Expansion mapping 
+
+entity:
+  name: Treatment
+  fields:
+    base:
+      - submitter_participant_id
+      - submitter_treatment_id
+      - treatment_type
+      - submitter_diagnosis_id
+      - age_at_treatment
+      - treatment_duration
+      - treatment_intent
+      - treatment_response
+      - treatment_status
+    extension:
+      - treatment_note
+  pattern: expansion
+  params:
+    selection_type: checkbox
+    skip_values: [0,-1]
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Treatment Record Expansion
+  # Converts ~50 treatment checkboxes into N records per participant
+  # Each treatment record links to corresponding medication or procedure record
+  # ---------------------------------------------------------------------------
+  - source_field: participant_id
+    target_field: submitter_participant_id
+
+  - target_field: submitter_treatment_id
+    target_type: identifier
+    params:
+      prefix_field: participant_id
+      type: treatment
+      suffix_fields: [source_field_name]  # Uses checkbox field name for unique ID
+
+  - target_field: submitter_diagnosis_id
+    target_type: identifier
+    params:
+      prefix_field: participant_id
+      type: diagnosis
+      suffix_fields: null  # Links to COVID-19 diagnosis
+
+  - target_field: age_at_treatment
+    target_type: age
+    params:
+      birth_date_field: dob      
+      event_date_field: null  # Most treatments don't have specific dates
+      age_fallback_field: null
+
+  - target_field: treatment_intent
+    source_field: null
+    default_value: "Missing - Not collected"
+
+  - target_field: treatment_response
+    source_field: null
+    default_value: "Missing - Not collected"
+
+  - target_field: treatment_status
+    source_field: null
+    default_value: "Missing - Not collected"
+
+# Each checkbox represents one treatment
+# Only minimal metadata here - full details in medication.yaml and procedure.yaml
+configs:
+  # =====================================================================
+  # Home Medications
+  # =====================================================================
+  - source_field: medication_aspirin
+    code: "rxnorm:1191"
+    term: "Aspirin"
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  eligible_participants: true
+  participant_eligibility:
+    - field: consent
+      operator: equals
+      value: 1
+  include_rows:
+    baseline: true
+    repeat_instruments: []
+  participant_id_field: "participant_id"

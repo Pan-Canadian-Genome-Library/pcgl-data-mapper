@@ -1,0 +1,99 @@
+# Example Study - Diagnosis Entity Mapping Configuration
+#
+# Target Entity: Diagnosis (PCGL Base Schema)
+# Source: Example CSV export
+# Pattern: Direct mapping
+
+entity:
+  name: Diagnosis
+  fields:
+    base:
+      - submitter_participant_id
+      - submitter_diagnosis_id
+      - age_at_diagnosis
+      - disease_code
+      - disease_term
+    extension:
+      - diagnosis_date
+  pattern: direct
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Participant Identifier
+  # Links to Participant entity
+  # ---------------------------------------------------------------------------
+  - source_field: participant_id
+    target_field: submitter_participant_id
+    source_label: "Participant ID"
+  
+  # ---------------------------------------------------------------------------
+  # Diagnosis Identifier
+  # Format: {participant_id}_diagnosis
+  # ---------------------------------------------------------------------------
+  - source_field: participant_id
+    target_field: submitter_diagnosis_id
+    source_label: null
+    target_type: identifier
+    params:
+      prefix_field: participant_id
+      type: diagnosis
+      suffix_fields: null
+  
+  # ---------------------------------------------------------------------------
+  # Age at Diagnosis
+  # Calculated from dob and diagnosis_date
+  # ---------------------------------------------------------------------------
+  - source_field: diagnosis_date
+    target_field: age_at_diagnosis
+    source_label: "Diagnosis date"
+    target_type: age
+    params:
+      birth_date_field: dob
+      event_date_field: diagnosis_date
+      age_fallback_field: age_years
+  
+  # ---------------------------------------------------------------------------
+  # Disease Code
+  # Source: diagnosis_code (ICD-10 code)
+  # ---------------------------------------------------------------------------
+  - source_field: diagnosis_code
+    target_field: disease_code
+    source_label: "Diagnosis code"
+    value_mappings:
+      "U07.1": "icd10:U07.1"
+  
+  # ---------------------------------------------------------------------------
+  # Disease Term
+  # Default for COVID-19
+  # ---------------------------------------------------------------------------
+  - source_field: diagnosis_code
+    target_field: disease_term
+    source_label: "Diagnosis code"
+    value_mappings:
+      "U07.1": "COVID-19, virus identified"
+  
+  # ---------------------------------------------------------------------------
+  # Diagnosis Date
+  # ---------------------------------------------------------------------------
+  - source_field: diagnosis_date
+    target_field: diagnosis_date
+    source_label: "Diagnosis date"
+    target_type: date
+
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  eligible_participants: true
+  participant_eligibility:
+    - field: consent
+      operator: equals
+      value: 1
+  include_rows:
+    baseline: true
+    repeat_instruments: []
+  field_filters:
+    - field: diagnosis_code
+      operator: is_not_null
+  participant_id_field: "participant_id"
