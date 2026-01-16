@@ -127,6 +127,7 @@ Data cleaning applied to source data before mapping.
 
 **Supported preprocessing types:**
 - `clean_numeric`: Remove commas and spaces from numeric fields (e.g., "2,004" → 2004)
+  - Supports exact field names, wildcard patterns (`*_numeric`, `measurement_*`), or `auto` to detect all numeric fields
 - `strip_whitespace`: Remove leading/trailing whitespace
 - `uppercase`: Convert text to uppercase
 - `lowercase`: Convert text to lowercase
@@ -135,9 +136,21 @@ Data cleaning applied to source data before mapping.
 
 ```yaml
 preprocessing:
-  # Clean numeric fields with comma separators
+  # Clean specific numeric fields
   - type: clean_numeric
     fields: [dob_year, household_size]
+  
+  # Clean all fields ending with _numeric
+  - type: clean_numeric
+    fields: ['*_numeric', '*_result_numeric']
+  
+  # Clean all measurement fields
+  - type: clean_numeric
+    fields: ['measurement_*']
+  
+  # Auto-detect all numeric-looking fields (contains commas/spaces in numbers)
+  - type: clean_numeric
+    fields: auto
   
   # Remove whitespace from text fields
   - type: strip_whitespace
@@ -163,6 +176,7 @@ Row-level filtering rules for which source rows to process.
 - `in`, `not_in`: Value in list
 - `is_null`, `is_not_null`: Null checks
 - `greater_than`, `less_than`, `greater_equal`, `less_equal`: Numeric comparisons
+- `regex_match_any`: Field matches any pattern in list (can use single-item list for one pattern)
 
 ```yaml
 filters:
@@ -297,24 +311,41 @@ configs:
     code: "MONDO:0004992"
     term: "Cancer"
     enrichments:
-      # Concatenates checked values into note field
+      # Concatenates checked values into note field (default behavior)
       - target_field: comorbidity_note
         source_type: checkbox
         create_records: false  # Aggregate into existing record (default)
+        append: true           # Concatenate values with "|" separator (default)
         value_mappings:
           com_cancer_location___1: "Cancer location: Lungs"
           com_cancer_location___2: "Cancer location: Breast"
           com_cancer_location___3: "Cancer location: Head and neck"
+      
+      # Overwrite instead of append
+      - target_field: comorbidity_status
+        source_type: checkbox
+        append: false          # Only keep last matched value (no concatenation)
+        value_mappings:
+          status_active: "Active"
+          status_inactive: "Inactive"
 ```
 
+**Checkbox append behavior:**
+- `append: true` (default) - Multiple checked boxes are concatenated with "|" separator
+- `append: false` - Only the last matched checkbox value is kept (values overwrite)
+
 **Use cases:**
-- `create_records: true` - When each checkbox represents a distinct objects (e.g., cancer subtypes become separate comorbidity records)
+- `create_records: true` - When each checkbox represents a distinct object (e.g., cancer subtypes become separate comorbidity records)
 - `create_records: false` - When checkboxes provide additional details for current record (e.g., treatment notes, location descriptors)
+- `append: true` - When you want to collect all checked values in one field (e.g., "Lungs | Breast")
+- `append: false` - When only one value should be kept (e.g., status fields)
 
 ### 6. post_processing (optional)
 Data cleaning applied to mapped records after field transformation.
 
 **Supported post-processing types:**
+- `clean_numeric`: Remove commas and spaces from numeric fields in mapped output (same syntax as preprocessing)
+  - Supports exact field names, wildcard patterns (`*_numeric`, `measurement_*`), or `auto` to detect all numeric fields
 - `convert_nullable_int`: Convert numeric columns to nullable Int64 type (preserves integers while allowing NaN)
   - `columns: auto` - Auto-detects age, duration, and count fields
   - `columns: [field1, field2]` - Explicit column list
@@ -322,6 +353,14 @@ Data cleaning applied to mapped records after field transformation.
 
 ```yaml
 post_processing:
+  # Clean numeric fields with commas in the OUTPUT data
+  - type: clean_numeric
+    fields: ['*_numeric']
+  
+  # Auto-detect and clean all numeric fields
+  - type: clean_numeric
+    fields: auto
+  
   # Convert to nullable integer (handles NaN values)
   - type: convert_nullable_int
     columns: [dob_year, age_at_enrollment]
@@ -334,7 +373,25 @@ post_processing:
   - type: filter_records
     field: measurement_value
     operator: is_not_null
+  
+  # Filter records by regex pattern matching
+  # Keep only records where ontology code matches allowed patterns
+  - type: filter_records
+    field: comorbidity_code
+    operator: regex_match_any
+    value:
+      - "^MONDO:.*"      # MONDO ontology codes
+      - "^HP:.*"         # Human Phenotype Ontology codes
+      - "^ICD10:.*"      # ICD-10 codes
+      - "^SNOMED:.*"     # SNOMED CT codes
 ```
+
+**Filter operators for post_processing:**
+- `equals`, `not_equals`: Exact match
+- `in`, `not_in`: Value in/not in list
+- `is_null`, `is_not_null`: Null checks
+- `greater_than`, `less_than`, `greater_equal`, `less_equal`: Numeric comparisons
+- `regex_match_any`: Field matches any pattern in list (supports single pattern in list)
 
 ### 7. validations (optional)
 Quality checks applied to mapped records. Validation failures are logged but don't block output.
