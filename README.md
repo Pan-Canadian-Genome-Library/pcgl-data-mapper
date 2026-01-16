@@ -1,6 +1,6 @@
 # PCGL Data Mapper
 
-YAML-driven framework for mapping research data to PCGL schema. Most studies need only YAML configs, no Python code required.
+YAML-driven framework for mapping research data to PCGL schema. Most studies need only YAML configs, no Python code changes required.
 
 ## Installation
 
