@@ -276,12 +276,18 @@ class EntityMapper:
             
             if step_type == 'clean_numeric':
                 # Remove commas, spaces from numeric fields
-                for field in fields:
+                # Support field patterns (e.g., '*_numeric', 'measurement_*')
+                fields_to_clean = self._resolve_field_patterns(df, fields)
+                
+                for field in fields_to_clean:
                     if field in df.columns:
                         df[field] = df[field].astype(str).str.replace(',', '', regex=False)
                         df[field] = df[field].str.replace(' ', '', regex=False)
                         df[field] = pd.to_numeric(df[field], errors='coerce')
                         self.logger.debug(f"Cleaned numeric field: {field}")
+                
+                if fields_to_clean:
+                    self.logger.info(f"Cleaned {len(fields_to_clean)} numeric fields")
             
             elif step_type == 'strip_whitespace':
                 # Remove leading/trailing whitespace
@@ -318,6 +324,54 @@ class EntityMapper:
             df = self._apply_redcap_filtering(df)
         
         return df
+    
+    def _resolve_field_patterns(self, df: pd.DataFrame, field_patterns: list) -> list:
+        """
+        Resolve field patterns to actual column names.
+        
+        Supports:
+        - Exact field names: ['field1', 'field2']
+        - Wildcard patterns: ['*_numeric', 'measurement_*', '*_result_*']
+        - Special value 'auto': Detects all numeric-looking columns
+        
+        Args:
+            df: DataFrame with columns to match
+            field_patterns: List of field names or patterns
+            
+        Returns:
+            List of actual column names that match the patterns
+        """
+        import fnmatch
+        
+        if not field_patterns:
+            return []
+        
+        # Handle 'auto' - detect columns that look numeric
+        if field_patterns == 'auto' or (isinstance(field_patterns, list) and 'auto' in field_patterns):
+            # Find columns with numeric-looking data (containing commas or spaces)
+            numeric_cols = []
+            for col in df.columns:
+                if df[col].dtype == object:  # String column
+                    # Check if any values contain commas or spaces in numbers
+                    sample = df[col].dropna().astype(str).head(100)
+                    if sample.str.match(r'^[\d,\s]+\.?\d*$').any():
+                        numeric_cols.append(col)
+            return numeric_cols
+        
+        matched_fields = []
+        
+        for pattern in field_patterns:
+            if '*' in pattern or '?' in pattern:
+                # Wildcard pattern - match against all columns
+                for col in df.columns:
+                    if fnmatch.fnmatch(col, pattern) and col not in matched_fields:
+                        matched_fields.append(col)
+            else:
+                # Exact field name
+                if pattern not in matched_fields:
+                    matched_fields.append(pattern)
+        
+        return matched_fields
     
     def _apply_redcap_filtering(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -516,6 +570,7 @@ class EntityMapper:
         - is_not_null, is_null: Field is/isn't null/NaN
         - greater_than, less_than: Field > or < value (numeric)
         - greater_equal, less_equal: Field >= or <= value (numeric)
+        - regex_match_any: Field matches any of the regex patterns (value is list of regex strings)
         
         Args:
             df: DataFrame to filter
@@ -563,6 +618,16 @@ class EntityMapper:
                 df = df[df[field] >= value]
             elif operator == 'less_equal':
                 df = df[df[field] <= value]
+            elif operator == 'regex_match_any':
+                # Match records where field matches any of the regex patterns
+                import re
+                if isinstance(value, list):
+                    df = df[df[field].astype(str).apply(
+                        lambda x: any(re.match(pattern, str(x)) for pattern in value)
+                    )]
+                else:
+                    self.logger.warning(f"regex_match_any expects a list of patterns, got {type(value)}")
+                    continue
             else:
                 self.logger.warning(f"Unknown operator '{operator}', skipping")
                 continue
@@ -905,12 +970,14 @@ class EntityMapper:
             elif source_type == 'checkbox':
                 # Checkbox aggregation (create_records=false)
                 # Check each checkbox and apply mapping
-                # Multiple checked boxes are concatenated with " | "
+                # Multiple checked boxes can be concatenated (append=true, default) or overwrite (append=false)
+                append_mode = field_config.get('append', True)  # Default to True for backward compatibility
+                
                 if value_mappings:
                     for checkbox_field_name, mapped_value in value_mappings.items():
                         if source_row.get(checkbox_field_name) == 1:
-                            # Treat each checked box as source_value=1, append_mode=True for concatenation
-                            _map_field_value(record, target_field, 1, {1: mapped_value}, append_mode=True)
+                            # Apply mapping with user-specified append mode
+                            _map_field_value(record, target_field, 1, {1: mapped_value}, append_mode=append_mode)
                 return
             
             # Route based on target_type (standard mapping logic)
@@ -1040,6 +1107,21 @@ class EntityMapper:
                             f"Post-processing filtering: {initial} → {final} records "
                             f"({initial - final} excluded)"
                         )
+                
+                elif step_type == 'clean_numeric':
+                    # Clean numeric fields in mapped output (remove commas, spaces)
+                    fields = step.get('fields', [])
+                    fields_to_clean = self._resolve_field_patterns(df, fields)
+                    
+                    for field in fields_to_clean:
+                        if field in df.columns:
+                            df[field] = df[field].astype(str).str.replace(',', '', regex=False)
+                            df[field] = df[field].str.replace(' ', '', regex=False)
+                            df[field] = pd.to_numeric(df[field], errors='coerce')
+                            self.logger.debug(f"Cleaned numeric field in output: {field}")
+                    
+                    if fields_to_clean:
+                        self.logger.info(f"Post-processing: Cleaned {len(fields_to_clean)} numeric fields")
                 
                 elif step_type == 'convert_nullable_int':
                     columns = step.get('columns', 'auto')

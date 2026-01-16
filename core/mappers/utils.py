@@ -124,7 +124,7 @@ def _set_or_append_field(
     
     if should_append and record.get(field_name):
         # Append to existing value
-        record[field_name] += " | " + str(value)
+        record[field_name] += "|" + str(value)
     else:
         # Set or replace value
         record[field_name] = value
