@@ -108,6 +108,9 @@ class MappingConfig:
         # Allow custom prefix for code/term fields (default to entity name)
         self.code_term_prefix = entity_config.get('code_term_prefix', self.entity_name.lower())
         
+        # Parse source_files configuration (for multi-file support)
+        self.source_files = self._parse_source_files(entity_config)
+        
         # Mappings are a list of field configs
         self.mappings = config_dict.get('mappings', [])
         
@@ -136,6 +139,102 @@ class MappingConfig:
         with open(yaml_path, 'r') as f:
             config_dict = yaml.safe_load(f)
         return cls(config_dict)
+    
+    def _parse_source_files(self, entity_config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Parse source_files configuration from entity config.
+        
+        Supports multiple formats:
+        1. No config: None (backward compatible - uses default input)
+        2. Single string: source_file: "file.csv"
+        3. Named roles: source_files: {primary: "...", secondary: [...]}
+        
+        Args:
+            entity_config: Entity configuration dictionary
+            
+        Returns:
+            Parsed source files configuration or None
+        """
+        # Check for source_file (singular) - simple string format
+        source_file = entity_config.get('source_file')
+        if source_file:
+            if isinstance(source_file, str):
+                return {
+                    'primary': source_file,
+                    'secondary': []
+                }
+        
+        # Check for source_files (plural) - named roles or list format
+        source_files = entity_config.get('source_files')
+        if not source_files:
+            # No source files specified - backward compatible mode
+            return None
+        
+        # Handle named roles format
+        if isinstance(source_files, dict):
+            primary = source_files.get('primary')
+            secondary = source_files.get('secondary', [])
+            
+            if not primary:
+                raise ValueError(
+                    f"Entity '{entity_config.get('name')}': source_files must specify 'primary' file"
+                )
+            
+            # Normalize secondary to list format
+            if not isinstance(secondary, list):
+                secondary = [secondary] if secondary else []
+            
+            # Parse each secondary file configuration
+            parsed_secondary = []
+            for sec_file in secondary:
+                if isinstance(sec_file, str):
+                    # Simple string - use defaults
+                    parsed_secondary.append({
+                        'file': sec_file,
+                        'join_on': 'participant_id',  # Default join key
+                        'join_type': 'left',           # Default join type
+                        'columns': None                # Load all columns
+                    })
+                elif isinstance(sec_file, dict):
+                    # Full configuration object
+                    file_path = sec_file.get('file')
+                    if not file_path:
+                        raise ValueError(
+                            f"Entity '{entity_config.get('name')}': secondary file must specify 'file' path"
+                        )
+                    
+                    join_on = sec_file.get('join_on', 'participant_id')
+                    join_type = sec_file.get('join_type', 'left')
+                    columns = sec_file.get('columns')
+                    
+                    # Validate join_type
+                    valid_join_types = ['left', 'right', 'inner', 'outer']
+                    if join_type not in valid_join_types:
+                        raise ValueError(
+                            f"Entity '{entity_config.get('name')}': invalid join_type '{join_type}'. "
+                            f"Must be one of: {valid_join_types}"
+                        )
+                    
+                    parsed_secondary.append({
+                        'file': file_path,
+                        'join_on': join_on,
+                        'join_type': join_type,
+                        'columns': columns
+                    })
+                else:
+                    raise ValueError(
+                        f"Entity '{entity_config.get('name')}': secondary file must be string or dict, "
+                        f"got {type(sec_file).__name__}"
+                    )
+            
+            return {
+                'primary': primary,
+                'secondary': parsed_secondary
+            }
+        
+        raise ValueError(
+            f"Entity '{entity_config.get('name')}': source_files must be a dict with 'primary' and 'secondary' keys"
+        )
     
 
 class EntityMapper:
@@ -1586,6 +1685,116 @@ class StudyDataMapper:
         self.stats['total_input_records'] = len(df)
         return df
     
+    def set_input_directory(self, input_dir: Path):
+        """
+        Set the input directory for multi-file mode.
+        
+        Args:
+            input_dir: Directory containing source CSV files
+        """
+        self.input_dir = Path(input_dir)
+        if not self.input_dir.exists():
+            raise FileNotFoundError(f"Input directory not found: {self.input_dir}")
+        self.logger.info(f"Input directory set to: {self.input_dir}")
+    
+    def load_entity_source_data(self, entity_name: str) -> pd.DataFrame:
+        """
+        Load source data for a specific entity based on its configuration.
+        
+        Supports:
+        - Single primary file
+        - Multiple files with joins (left, right, inner, outer)
+        - Column filtering to load only needed columns
+        
+        Args:
+            entity_name: Name of entity to load data for
+            
+        Returns:
+            Source DataFrame for this entity
+        """
+        mapper = self.mappers[entity_name]
+        config = mapper.config
+        
+        # If no source_files config, look for auto-discovery
+        if not config.source_files:
+            # Try to auto-discover entity-specific file
+            auto_file = self.input_dir / f"{entity_name.lower()}.csv"
+            if auto_file.exists():
+                self.logger.info(f"Auto-discovered source file: {auto_file}")
+                df = pd.read_csv(auto_file)
+                self.logger.info(f"Loaded {len(df)} records from {auto_file.name}")
+                return df
+            else:
+                raise FileNotFoundError(
+                    f"No source_files configured for entity '{entity_name}' and "
+                    f"auto-discovery failed. Expected: {auto_file}\n"
+                    f"Please specify source_file or source_files in the entity YAML config."
+                )
+        
+        # Load primary file
+        primary_file = config.source_files['primary']
+        primary_path = self.input_dir / primary_file
+        
+        if not primary_path.exists():
+            raise FileNotFoundError(
+                f"Primary source file not found for entity '{entity_name}': {primary_path}"
+            )
+        
+        self.logger.info(f"Loading primary file for {entity_name}: {primary_file}")
+        primary_df = pd.read_csv(primary_path)
+        self.logger.info(f"  Loaded {len(primary_df)} records with {len(primary_df.columns)} columns")
+        
+        # Load and join secondary files if specified
+        secondary_files = config.source_files.get('secondary', [])
+        
+        if not secondary_files:
+            return primary_df
+        
+        result_df = primary_df
+        
+        for sec_config in secondary_files:
+            sec_file = sec_config['file']
+            sec_path = self.input_dir / sec_file
+            
+            if not sec_path.exists():
+                raise FileNotFoundError(
+                    f"Secondary source file not found for entity '{entity_name}': {sec_path}"
+                )
+            
+            self.logger.info(f"Loading secondary file: {sec_file}")
+            
+            # Load secondary file
+            sec_df = pd.read_csv(sec_path)
+            
+            # Filter columns if specified
+            columns = sec_config.get('columns')
+            join_on = sec_config['join_on']
+            
+            if columns:
+                # Ensure join key(s) are included
+                join_keys = [join_on] if isinstance(join_on, str) else join_on
+                cols_to_load = list(set(columns + join_keys))
+                sec_df = sec_df[cols_to_load]
+                self.logger.info(f"  Loaded {len(sec_df)} records, filtered to {len(cols_to_load)} columns")
+            else:
+                self.logger.info(f"  Loaded {len(sec_df)} records with {len(sec_df.columns)} columns")
+            
+            # Perform join
+            join_type = sec_config['join_type']
+            
+            self.logger.info(f"  Joining on '{join_on}' using '{join_type}' join")
+            
+            result_df = result_df.merge(
+                sec_df,
+                on=join_on,
+                how=join_type,
+                suffixes=('', '_secondary')
+            )
+            
+            self.logger.info(f"  Result after join: {len(result_df)} records")
+        
+        return result_df
+    
     def process_entity(self, entity_name: str, source_df: pd.DataFrame) -> pd.DataFrame:
         """
         Process a single entity.
@@ -1614,7 +1823,7 @@ class StudyDataMapper:
     
     def process_all_entities(self, source_df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         """
-        Process all entities in sequence.
+        Process all entities in sequence (single-file mode).
         
         Args:
             source_df: Source DataFrame
@@ -1625,7 +1834,7 @@ class StudyDataMapper:
         self.stats['start_time'] = datetime.now()
         
         self.logger.info("=" * 80)
-        self.logger.info(f"{self.study_id.upper()} - PROCESSING ALL ENTITIES")
+        self.logger.info(f"{self.study_id.upper()} - PROCESSING ALL ENTITIES (Single-File Mode)")
         self.logger.info("=" * 80)
         
         results = {}
@@ -1633,6 +1842,43 @@ class StudyDataMapper:
         for entity_name in self.entities:
             try:
                 results[entity_name] = self.process_entity(entity_name, source_df)
+            except Exception as e:
+                self.logger.error(f"Error processing {entity_name}: {e}", exc_info=True)
+                results[entity_name] = pd.DataFrame()
+        
+        self.stats['end_time'] = datetime.now()
+        self.results = results
+        
+        return results
+    
+    def process_all_entities_multifile(self) -> Dict[str, pd.DataFrame]:
+        """
+        Process all entities in sequence (multi-file mode).
+        
+        Each entity loads its own source data based on configuration.
+        
+        Returns:
+            Dictionary mapping entity names to result DataFrames
+        """
+        self.stats['start_time'] = datetime.now()
+        
+        self.logger.info("=" * 80)
+        self.logger.info(f"{self.study_id.upper()} - PROCESSING ALL ENTITIES (Multi-File Mode)")
+        self.logger.info("=" * 80)
+        
+        results = {}
+        
+        for entity_name in self.entities:
+            try:
+                # Load entity-specific source data
+                entity_source_df = self.load_entity_source_data(entity_name)
+                
+                # Update total input records (sum across all entities)
+                self.stats['total_input_records'] += len(entity_source_df)
+                
+                # Process entity
+                results[entity_name] = self.process_entity(entity_name, entity_source_df)
+                
             except Exception as e:
                 self.logger.error(f"Error processing {entity_name}: {e}", exc_info=True)
                 results[entity_name] = pd.DataFrame()

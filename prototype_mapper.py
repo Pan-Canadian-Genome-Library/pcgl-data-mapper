@@ -60,28 +60,44 @@ def main():
         epilog='Example: %(prog)s --study_id StudyA --input_csv data/source/input.csv --output_dir data/mapped/'
     )
     parser.add_argument('--study_id', help='Study identifier')
-    parser.add_argument('--input_csv', type=Path, help='Path to source CSV file')
+    
+    # Support both single-file (backward compatible) and multi-file (new) modes
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument('--input_csv', type=Path, help='Path to source CSV file (single-file mode)')
+    input_group.add_argument('--input_dir', type=Path, help='Directory containing source CSV files (multi-file mode)')
+    
     parser.add_argument('--output_dir', type=Path, help='Output directory for mapped files')
     args = parser.parse_args()
     
     study_id = args.study_id
-    input_path = args.input_csv
+    input_csv_path = args.input_csv
+    input_dir_path = args.input_dir
     output_dir = args.output_dir
     
     # Validate input
-    if not input_path.exists():
-        logger.error(f"Input file not found: {input_path}")
+    if input_csv_path and not input_csv_path.exists():
+        logger.error(f"Input file not found: {input_csv_path}")
+        sys.exit(1)
+    
+    if input_dir_path and not input_dir_path.exists():
+        logger.error(f"Input directory not found: {input_dir_path}")
         sys.exit(1)
     
     try:
         # Initialize mapper (auto-discovers entities, dynamically loads study module)
         mapper = StudyDataMapper(study_id=study_id)
         
-        # Load source data
-        source_df = mapper.load_source_data(input_path)
-        
-        # Process all entities (automatically from discovered configs)
-        mapper.process_all_entities(source_df)
+        # Determine mode and process accordingly
+        if input_csv_path:
+            # Single-file mode (backward compatible)
+            logger.info(f"Running in single-file mode with: {input_csv_path}")
+            source_df = mapper.load_source_data(input_csv_path)
+            mapper.process_all_entities(source_df)
+        else:
+            # Multi-file mode (new)
+            logger.info(f"Running in multi-file mode with directory: {input_dir_path}")
+            mapper.set_input_directory(input_dir_path)
+            mapper.process_all_entities_multifile()
         
         # Save results
         mapper.save_results(output_dir)

@@ -122,6 +122,118 @@ CUSTOM_FUNCTIONS = {
 
 Your function receives: `source_df`, `config`, `params`, and `**kwargs`, and must return a DataFrame.
 
+#### Multi-File Source Configuration
+
+If the source data was splitted across multiple CSV files, you can specify which files each entity should use.
+
+**Two Input Modes:**
+
+1. **Single-file mode** : All data in one CSV file
+   - CLI: `--input_csv data/source/study.csv`
+   - No `source_files` config needed
+   
+2. **Multi-file mode** : Data split across multiple CSV files
+   - CLI: `--input_dir data/source/MyStudy/`
+   - Specify `source_files` in entity config
+
+**Basic Single Source File:**
+
+```yaml
+entity:
+  name: Participant
+  fields:
+    base:
+      - submitter_participant_id
+```
+
+**Multiple Source Files with Join:**
+
+```yaml
+entity:
+  name: Diagnosis
+  source_files:
+    primary: "clinical.csv"        # Main data source
+    secondary:
+      - file: "demographics.csv"   # Additional data to join
+        join_on: participant_id    # Join key (default: participant_id)
+        join_type: left            # Join type (default: left)
+        columns: [age, dob_year]   # Only load these columns (optional)
+      
+      - file: "lab_results.csv"
+        join_on: participant_id
+        join_type: inner
+        columns: [crp_result, wbc_count]
+  fields:
+    base:
+      - submitter_participant_id
+      - age_at_diagnosis
+      - disease_code
+```
+
+**Join Configuration Parameters:**
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `file` | Yes | - | CSV filename relative to `--input_dir` |
+| `join_on` | Yes | - | Column name(s) to join on |
+| `join_type` | No | `left` | Type of join: `left`, `right`, `inner`, `outer` |
+| `columns` | No | All columns | List of specific columns to load |
+
+**Join Types:**
+- **`left`** (default): Keep all primary records, add matching secondary data
+- **`right`**: Keep all secondary records, add matching primary data  
+- **`inner`**: Only records that exist in both files
+- **`outer`**: All records from both files
+
+**Auto-Discovery:**
+
+If you don't specify `source_files`, the mapper will:
+1. In multi-file mode (`--input_dir`): Look for `{entity_name}.csv`
+2. In single-file mode (`--input_csv`): Use the provided CSV file
+
+```yaml
+entity:
+  name: Participant
+  # No source_files specified
+  # Multi-file mode looks for: participant.csv
+  # Single-file mode uses: --input_csv file
+```
+
+**Example File Structure:**
+
+```
+data/source/MyStudy/
+  ├── demographics.csv      # participant_id, age, sex, race, dob_year
+  ├── clinical.csv          # participant_id, diagnosis, treatment
+  └── lab_results.csv       # participant_id, test_date, test_result
+```
+
+**Migration from Single-File:**
+
+No changes required! Existing single-file studies continue to work:
+
+```bash
+# Still works exactly as before
+python prototype_mapper.py \
+  --study_id HostSeq \
+  --input_csv "data/source/HostSeq.csv" \
+  --output_dir data/mapped/HostSeq/
+```
+
+**Using Multi-File Mode:**
+
+```bash
+# New multi-file mode
+python prototype_mapper.py \
+  --study_id MyStudy \
+  --input_dir data/source/MyStudy/ \
+  --output_dir data/mapped/MyStudy/
+```
+
+**Complete Multi-File Example:**
+
+See `studies/_TEMPLATE/config/diagnosis_multifile_example.yaml` for a complete working example showing how to join multiple source files.
+
 ### 2. preprocessing (optional)
 Data cleaning applied to source data before mapping.
 

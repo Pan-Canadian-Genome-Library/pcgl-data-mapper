@@ -6,7 +6,7 @@ YAML-driven framework for mapping research data to PCGL schema. Most studies nee
 
 ```bash
 # Clone the repository
-git clone git@github.com:Pan-Canadian-Genome-Library/pcgl-data-mapper.git
+git clone https://github.com/Pan-Canadian-Genome-Library/pcgl-data-mapper.git
 cd pcgl-data-mapper
 
 # Install dependencies
@@ -15,11 +15,16 @@ pip install -r requirements.txt
 
 ## Input/Output
 
-**Input:**
-- **Source CSV file** - Your study's raw data (e.g., REDCap export, database dump)
-  - Typically located in `data/source/` directory
-  - Can be any CSV with column headers
+**Input (Two Modes):**
+- **Single-file mode** (backward compatible):
+  - One CSV file with all data
   - Example: `data/source/EXAMPLE.csv`
+  
+- **Multi-file mode** (NEW):
+  - Directory with multiple CSV files
+  - Split by domain: `demographics.csv`, `clinical.csv`, `lab_results.csv`
+  - Automatically joins files per entity configuration
+  - Example: `data/source/MyStudy/`
 
 **Output:**
 - **Mapped CSV files** - One file per entity, written to specified output directory
@@ -31,6 +36,7 @@ pip install -r requirements.txt
 
 ## Quick Start
 
+### Single-File Mode 
 ```bash
 # Try the EXAMPLE study first
 python prototype_mapper.py --study_id EXAMPLE --input_csv data/source/EXAMPLE.csv --output_dir data/mapped/EXAMPLE/
@@ -43,6 +49,14 @@ cp -r studies/_TEMPLATE studies/MyStudy
 # Run your data mapper
 python prototype_mapper.py --study_id MyStudy --input_csv data/source/your_data.csv --output_dir data/mapped/MyStudy/
 ```
+
+### Multi-File Mode 
+```bash
+# Multiple source files split by domain
+python prototype_mapper.py --study_id MyStudy --input_dir data/source/MyStudy/ --output_dir data/mapped/MyStudy/
+```
+
+See [Multi-File Configuration](studies/README.md#multi-file-source-configuration-new) for complete multi-file documentation and examples.
 
 ## Project Structure
 

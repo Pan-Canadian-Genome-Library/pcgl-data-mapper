@@ -6,6 +6,11 @@
 entity:
   name: Demographic
   
+  # Optional: Multi-file input support
+  # Uncomment and customize to load from specific CSV file(s)
+  # source_files:
+  #   primary: "demographics.csv"
+  
   fields:
     base:
       - submitter_participant_id
