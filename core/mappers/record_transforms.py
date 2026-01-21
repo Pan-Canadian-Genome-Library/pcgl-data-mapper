@@ -223,6 +223,11 @@ def apply_identifier_to_record(
             # Special case: use the actual source field name
             if source_field:
                 suffix_parts.append(str(source_field))
+        elif isinstance(field_or_value, str) and field_or_value.startswith('literal:'):
+            # Force literal string usage with 'literal:' prefix
+            # e.g., 'literal:SUBJECT_ID' uses the string 'SUBJECT_ID' not the field value
+            literal_value = field_or_value[8:]  # Remove 'literal:' prefix
+            suffix_parts.append(literal_value)
         elif field_or_value in source_row.index:
             # Field exists in source row - use its value
             value = source_row.get(field_or_value)

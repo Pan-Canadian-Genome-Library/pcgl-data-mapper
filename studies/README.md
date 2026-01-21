@@ -131,12 +131,6 @@ If the source data was splitted across multiple CSV files, you can specify which
 1. **Single-file mode** : All data in one CSV file
    - CLI: `--input_csv data/source/study.csv`
    - No `source_files` config needed
-   
-2. **Multi-file mode** : Data split across multiple CSV files
-   - CLI: `--input_dir data/source/MyStudy/`
-   - Specify `source_files` in entity config
-
-**Basic Single Source File:**
 
 ```yaml
 entity:
@@ -146,7 +140,9 @@ entity:
       - submitter_participant_id
 ```
 
-**Multiple Source Files with Join:**
+2. **Multi-file mode** : Data split across multiple CSV files
+   - CLI: `--input_dir data/source/MyStudy/`
+   - Specify `source_files` in entity config
 
 ```yaml
 entity:
@@ -163,21 +159,51 @@ entity:
         join_on: participant_id
         join_type: inner
         columns: [crp_result, wbc_count]
-  fields:
-    base:
-      - submitter_participant_id
-      - age_at_diagnosis
-      - disease_code
+      
+      # Union multiple files (concatenate rows, union columns)
+      - file: [specimens_batch1.csv, specimens_batch2.csv]
+        join_on: participant_id
+        join_type: left
+        # Files are concatenated (rows appended)
+        # Columns are unioned (missing columns filled with null)
 ```
 
 **Join Configuration Parameters:**
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `file` | Yes | - | CSV filename relative to `--input_dir` |
+| `file` | Yes | - | Data filename (string) or list of filenames to concatenate |
 | `join_on` | Yes | - | Column name(s) to join on |
 | `join_type` | No | `left` | Type of join: `left`, `right`, `inner`, `outer` |
-| `columns` | No | All columns | List of specific columns to load |
+| `columns` | No | All columns | List of specific columns to load (applied after concatenation) |
+
+**File Union (Concatenation):**
+
+When `file` is a **list of files**, the mapper will:
+1. Load all files individually
+2. **Concatenate rows** vertically (append all records)
+3. **Union columns** (keep all columns from all files)
+4. **Fill missing values** with null/NaN where columns don't exist in some files
+5. Then join the concatenated result to primary file
+
+Use this when:
+- Files have the same/similar structure but from different batches/periods
+- Files share most columns but each may have extra unique columns
+- You want to combine data from multiple sources into one logical table
+
+Example:
+```yaml
+# specimens_batch1.csv has: specimen_id, type, volume, storage_temp
+# specimens_batch2.csv has: specimen_id, type, volume, collection_site
+# Result will have: specimen_id, type, volume, storage_temp, collection_site
+# Batch1 rows will have null collection_site
+# Batch2 rows will have null storage_temp
+```
+
+**Supported File Formats:**
+- `.csv` - Comma-separated values
+- `.tsv` - Tab-separated values
+- `.txt` - Text files with auto-detected delimiter
 
 **Join Types:**
 - **`left`** (default): Keep all primary records, add matching secondary data
@@ -199,41 +225,6 @@ entity:
   # Single-file mode uses: --input_csv file
 ```
 
-**Example File Structure:**
-
-```
-data/source/MyStudy/
-  ├── demographics.csv      # participant_id, age, sex, race, dob_year
-  ├── clinical.csv          # participant_id, diagnosis, treatment
-  └── lab_results.csv       # participant_id, test_date, test_result
-```
-
-**Migration from Single-File:**
-
-No changes required! Existing single-file studies continue to work:
-
-```bash
-# Still works exactly as before
-python prototype_mapper.py \
-  --study_id HostSeq \
-  --input_csv "data/source/HostSeq.csv" \
-  --output_dir data/mapped/HostSeq/
-```
-
-**Using Multi-File Mode:**
-
-```bash
-# New multi-file mode
-python prototype_mapper.py \
-  --study_id MyStudy \
-  --input_dir data/source/MyStudy/ \
-  --output_dir data/mapped/MyStudy/
-```
-
-**Complete Multi-File Example:**
-
-See `studies/_TEMPLATE/config/diagnosis_multifile_example.yaml` for a complete working example showing how to join multiple source files.
-
 ### 2. preprocessing (optional)
 Data cleaning applied to source data before mapping.
 
@@ -243,6 +234,11 @@ Data cleaning applied to source data before mapping.
 - `strip_whitespace`: Remove leading/trailing whitespace
 - `uppercase`: Convert text to uppercase
 - `lowercase`: Convert text to lowercase
+- `calculate_field`: Create calculated fields using pandas expressions
+  - Uses `df.eval()` for safe formula evaluation with automatic NaN propagation
+  - Supports arithmetic (+, -, *, /, **, %), comparison (<, >, ==, !=), boolean (&, |, ~), and conditionals
+  - Column references are used directly without special syntax
+  - If any input column is NaN, the result will be NaN (automatic null propagation)
 
 **Note:** For complex preprocessing logic, override the `preprocess()` method in a custom mapper class (see Study-Specific Customization).
 
@@ -271,6 +267,21 @@ preprocessing:
   # Normalize case
   - type: uppercase
     fields: [country_code]
+  
+  # Calculate age in days from gestational weeks and maternal age
+  - type: calculate_field
+    target: age_at_2nd_trimester_days
+    formula: "(maternal_age_years * 365.25) + ((gestation_week_v2 - gestation_week_v1) * 7)"
+  
+  # Calculate BMI from weight and height
+  - type: calculate_field
+    target: bmi
+    formula: "weight_kg / (height_m ** 2)"
+  
+  # Handle nulls with conditional expressions
+  - type: calculate_field
+    target: age_with_default
+    formula: "age_days if age_days.notna() else 0"
 ```
 
 ### 3. filters (optional)

@@ -18,6 +18,8 @@ import pandas as pd
 import yaml
 import importlib
 from datetime import datetime
+import fnmatch
+import re
 
 from .utils import (
     _map_field_value,
@@ -25,6 +27,7 @@ from .utils import (
     convert_nullable_int_columns,
     validate_participant_id,
     validate_age_in_days,
+    read_data_file,
 )
 from .record_transforms import (
     apply_value_to_record,
@@ -112,18 +115,17 @@ class MappingConfig:
         self.source_files = self._parse_source_files(entity_config)
         
         # Mappings are a list of field configs
-        self.mappings = config_dict.get('mappings', [])
+        self.mappings = config_dict.get('mappings', []) or []
         
         # Configs for checkbox expansion (comorbidity, phenotype, etc.)
         # Changed from dict to list format: configs is now a list with source_field property
-        self.configs = config_dict.get('configs', [])
+        self.configs = config_dict.get('configs', []) or []
         
-        # Common configuration fields
-        self.preprocessing = config_dict.get('preprocessing', [])
-        self.filters = config_dict.get('filters', {})
-        self.validations = config_dict.get('validations', [])
-        self.transformations = config_dict.get('transformations', {})
-        self.post_processing = config_dict.get('post_processing', [])
+        # Common configuration fields - handle None values when keys exist but are empty
+        self.preprocessing = config_dict.get('preprocessing', []) or []
+        self.filters = config_dict.get('filters', {}) or {}
+        self.validations = config_dict.get('validations', []) or []
+        self.post_processing = config_dict.get('post_processing', []) or []
         
     @classmethod
     def from_yaml(cls, yaml_path: Path) -> 'MappingConfig':
@@ -203,6 +205,19 @@ class MappingConfig:
                             f"Entity '{entity_config.get('name')}': secondary file must specify 'file' path"
                         )
                     
+                    # file_path can be a string (single file) or list (multiple files to concatenate)
+                    # Validate that list elements are strings
+                    if isinstance(file_path, list):
+                        if not all(isinstance(f, str) for f in file_path):
+                            raise ValueError(
+                                f"Entity '{entity_config.get('name')}': when 'file' is a list, "
+                                f"all elements must be strings (file names)"
+                            )
+                    elif not isinstance(file_path, str):
+                        raise ValueError(
+                            f"Entity '{entity_config.get('name')}': 'file' must be a string or list of strings"
+                        )
+                    
                     join_on = sec_file.get('join_on', 'participant_id')
                     join_type = sec_file.get('join_type', 'left')
                     columns = sec_file.get('columns')
@@ -216,7 +231,7 @@ class MappingConfig:
                         )
                     
                     parsed_secondary.append({
-                        'file': file_path,
+                        'file': file_path,  # Can be string or list
                         'join_on': join_on,
                         'join_type': join_type,
                         'columns': columns
@@ -409,6 +424,31 @@ class EntityMapper:
                         df[field] = df[field].astype(str).str.lower()
                         self.logger.debug(f"Converted to lowercase: {field}")
             
+            elif step_type == 'calculate_field':
+                # Calculate new field using pandas eval() with formula
+                target = step.get('target')
+                formula = step.get('formula')
+                
+                if not target or not formula:
+                    self.logger.warning(f"Skipping incomplete calculate_field: missing 'target' or 'formula'")
+                    continue
+                
+                try:
+                    # Use pandas eval() for safe formula evaluation
+                    # Automatically handles column references and NaN propagation
+                    df[target] = df.eval(formula)
+                    self.logger.info(f"Calculated field '{target}' using formula: {formula}")
+                except Exception as e:
+                    self.logger.error(
+                        f"Error calculating field '{target}' with formula '{formula}': {e}\n"
+                        f"Hint: Ensure all column names in the formula exist in the data. "
+                        f"Use column.fillna(0) to handle nulls, or allow NaN propagation (default)."
+                    )
+                    raise ValueError(
+                        f"Invalid calculate_field formula for '{target}': {formula}\n"
+                        f"Error: {e}"
+                    ) from e
+            
             else:
                 self.logger.warning(f"Unknown preprocessing type: {step_type}")
         
@@ -440,7 +480,6 @@ class EntityMapper:
         Returns:
             List of actual column names that match the patterns
         """
-        import fnmatch
         
         if not field_patterns:
             return []
@@ -610,7 +649,7 @@ class EntityMapper:
         participant_eligibility = self.config.filters.get('participant_eligibility')
         
         if participant_eligibility:
-            # Use YAML-based filtering
+            # Use YAML-based filtering (expects list of filter dicts)
             self.logger.info("Applying YAML-configured participant eligibility filters")
             return self._apply_participant_eligibility_filters(df, participant_eligibility)
         
@@ -719,11 +758,21 @@ class EntityMapper:
                 df = df[df[field] <= value]
             elif operator == 'regex_match_any':
                 # Match records where field matches any of the regex patterns
-                import re
                 if isinstance(value, list):
-                    df = df[df[field].astype(str).apply(
-                        lambda x: any(re.match(pattern, str(x)) for pattern in value)
-                    )]
+                    try:
+                        df = df[df[field].astype(str).apply(
+                            lambda x: any(re.match(pattern, str(x)) for pattern in value)
+                        )]
+                    except re.error as e:
+                        self.logger.error(
+                            f"Invalid regex pattern in {filter_type} filter for field '{field}': {e}\n"
+                            f"Patterns: {value}\n"
+                            f"Hint: Special regex characters like *, +, ?, etc. need to be escaped or used correctly."
+                        )
+                        raise ValueError(
+                            f"Invalid regex pattern in field '{field}': {e}. "
+                            f"Check your filter configuration for special characters that need escaping."
+                        ) from e
                 else:
                     self.logger.warning(f"regex_match_any expects a list of patterns, got {type(value)}")
                     continue
@@ -1069,13 +1118,16 @@ class EntityMapper:
             elif source_type == 'checkbox':
                 # Checkbox aggregation (create_records=false)
                 # Check each checkbox and apply mapping
-                # Multiple checked boxes can be concatenated (append=true, default) or overwrite (append=false)
+                # Supports both single values and list values in value_mappings
                 append_mode = field_config.get('append', True)  # Default to True for backward compatibility
                 
                 if value_mappings:
                     for checkbox_field_name, mapped_value in value_mappings.items():
-                        if source_row.get(checkbox_field_name) == 1:
-                            # Apply mapping with user-specified append mode
+                        checkbox_value = source_row.get(checkbox_field_name)
+                        if checkbox_value == 1:
+                            # mapped_value can be a single value or a list
+                            # target_field can be a single field or a list of fields
+                            # _map_field_value handles all combinations
                             _map_field_value(record, target_field, 1, {1: mapped_value}, append_mode=append_mode)
                 return
             
@@ -1670,17 +1722,17 @@ class StudyDataMapper:
     
     def load_source_data(self, input_path: Path) -> pd.DataFrame:
         """
-        Load source data from CSV file.
+        Load source data from file (supports CSV, TSV, TXT).
         
         Args:
-            input_path: Path to input CSV file
+            input_path: Path to input data file (.csv, .tsv, or .txt)
             
         Returns:
             Source DataFrame
         """
         self.logger.info(f"Loading source data from {input_path}")
         
-        df = pd.read_csv(input_path)
+        df = read_data_file(input_path)
         self.logger.info(f"Loaded {len(df)} records with {len(df.columns)} columns")
         self.stats['total_input_records'] = len(df)
         return df
@@ -1718,18 +1770,21 @@ class StudyDataMapper:
         # If no source_files config, look for auto-discovery
         if not config.source_files:
             # Try to auto-discover entity-specific file
-            auto_file = self.input_dir / f"{entity_name.lower()}.csv"
-            if auto_file.exists():
-                self.logger.info(f"Auto-discovered source file: {auto_file}")
-                df = pd.read_csv(auto_file)
-                self.logger.info(f"Loaded {len(df)} records from {auto_file.name}")
-                return df
-            else:
-                raise FileNotFoundError(
-                    f"No source_files configured for entity '{entity_name}' and "
-                    f"auto-discovery failed. Expected: {auto_file}\n"
-                    f"Please specify source_file or source_files in the entity YAML config."
-                )
+            # Try auto-discovery with common file extensions
+            for ext in ['.csv', '.tsv', '.txt']:
+                auto_file = self.input_dir / f"{entity_name.lower()}{ext}"
+                if auto_file.exists():
+                    self.logger.info(f"Auto-discovered source file: {auto_file}")
+                    df = read_data_file(auto_file)
+                    self.logger.info(f"Loaded {len(df)} records from {auto_file.name}")
+                    return df
+            
+            # If no file found, raise error
+            raise FileNotFoundError(
+                f"No source_files configured for entity '{entity_name}' and "
+                f"auto-discovery failed. Expected: {entity_name.lower()}.csv/.tsv/.txt\n"
+                f"Please specify source_file or source_files in the entity YAML config."
+            )
         
         # Load primary file
         primary_file = config.source_files['primary']
@@ -1741,7 +1796,7 @@ class StudyDataMapper:
             )
         
         self.logger.info(f"Loading primary file for {entity_name}: {primary_file}")
-        primary_df = pd.read_csv(primary_path)
+        primary_df = read_data_file(primary_path)
         self.logger.info(f"  Loaded {len(primary_df)} records with {len(primary_df.columns)} columns")
         
         # Load and join secondary files if specified
@@ -1754,30 +1809,53 @@ class StudyDataMapper:
         
         for sec_config in secondary_files:
             sec_file = sec_config['file']
-            sec_path = self.input_dir / sec_file
+            join_on = sec_config['join_on']
             
-            if not sec_path.exists():
-                raise FileNotFoundError(
-                    f"Secondary source file not found for entity '{entity_name}': {sec_path}"
-                )
-            
-            self.logger.info(f"Loading secondary file: {sec_file}")
-            
-            # Load secondary file
-            sec_df = pd.read_csv(sec_path)
+            # Handle file union: if sec_file is a list, concatenate all files
+            if isinstance(sec_file, list):
+                self.logger.info(f"Loading and concatenating {len(sec_file)} secondary files")
+                
+                sec_dfs = []
+                for file_name in sec_file:
+                    file_path = self.input_dir / file_name
+                    
+                    if not file_path.exists():
+                        raise FileNotFoundError(
+                            f"Secondary source file not found for entity '{entity_name}': {file_path}"
+                        )
+                    
+                    self.logger.info(f"  Loading: {file_name}")
+                    df = read_data_file(file_path)
+                    self.logger.info(f"    {len(df)} records, {len(df.columns)} columns")
+                    sec_dfs.append(df)
+                
+                # Concatenate with union of columns (fill missing with NaN)
+                sec_df = pd.concat(sec_dfs, ignore_index=True, sort=False)
+                all_columns = sec_df.columns.tolist()
+                self.logger.info(f"  Concatenated result: {len(sec_df)} records, {len(all_columns)} columns (union)")
+                
+            else:
+                # Single file (existing behavior)
+                sec_path = self.input_dir / sec_file
+                
+                if not sec_path.exists():
+                    raise FileNotFoundError(
+                        f"Secondary source file not found for entity '{entity_name}': {sec_path}"
+                    )
+                
+                self.logger.info(f"Loading secondary file: {sec_file}")
+                sec_df = read_data_file(sec_path)
+                self.logger.info(f"  Loaded {len(sec_df)} records with {len(sec_df.columns)} columns")
             
             # Filter columns if specified
             columns = sec_config.get('columns')
-            join_on = sec_config['join_on']
             
             if columns:
                 # Ensure join key(s) are included
                 join_keys = [join_on] if isinstance(join_on, str) else join_on
                 cols_to_load = list(set(columns + join_keys))
                 sec_df = sec_df[cols_to_load]
-                self.logger.info(f"  Loaded {len(sec_df)} records, filtered to {len(cols_to_load)} columns")
-            else:
-                self.logger.info(f"  Loaded {len(sec_df)} records with {len(sec_df.columns)} columns")
+                self.logger.info(f"  Filtered to {len(cols_to_load)} columns")
             
             # Perform join
             join_type = sec_config['join_type']
@@ -1792,6 +1870,19 @@ class StudyDataMapper:
             )
             
             self.logger.info(f"  Result after join: {len(result_df)} records")
+        
+        # TEMPORARY DEBUG: Print entity data after joining
+        if entity_name.lower() == 'diagnosis':
+            self.logger.info("=" * 80)
+            self.logger.info("DEBUG: DIAGNOSIS ENTITY - DATA AFTER JOINING")
+            self.logger.info("=" * 80)
+            self.logger.info(f"Shape: {result_df.shape}")
+            self.logger.info(f"Columns: {list(result_df.columns)}")
+            self.logger.info("\nFirst 10 rows:")
+            self.logger.info("\n" + result_df.head(10).to_string())
+            self.logger.info("\nData types:")
+            self.logger.info("\n" + str(result_df.dtypes))
+            self.logger.info("=" * 80)
         
         return result_df
     

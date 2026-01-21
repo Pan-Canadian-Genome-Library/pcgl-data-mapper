@@ -16,15 +16,20 @@ pip install -r requirements.txt
 ## Input/Output
 
 **Input (Two Modes):**
-- **Single-file mode** (backward compatible):
-  - One CSV file with all data
+- **Single-file mode** :
+  - One data file with all data (CSV, TSV, or TXT format)
   - Example: `data/source/EXAMPLE.csv`
   
-- **Multi-file mode** (NEW):
-  - Directory with multiple CSV files
-  - Split by domain: `demographics.csv`, `clinical.csv`, `lab_results.csv`
+- **Multi-file mode** :
+  - Directory with multiple data files (CSV, TSV, or TXT)
+  - Split by domain: e.g, `demographics.csv`, `clinical.tsv`, `lab_results.txt`
   - Automatically joins files per entity configuration
   - Example: `data/source/MyStudy/`
+
+**Supported File Formats:**
+- `.csv` - Comma-separated values
+- `.tsv` - Tab-separated values  
+- `.txt` - Text files (delimiter auto-detected)
 
 **Output:**
 - **Mapped CSV files** - One file per entity, written to specified output directory
@@ -36,29 +41,39 @@ pip install -r requirements.txt
 
 ## Quick Start
 
-### Single-File Mode 
+### 1. Try the EXAMPLE study first
 ```bash
-# Try the EXAMPLE study first
 python prototype_mapper.py --study_id EXAMPLE --input_csv data/source/EXAMPLE.csv --output_dir data/mapped/EXAMPLE/
+```
 
-# Create your own study from template
+### 2. Create your own study from template
+```bash
 cp -r studies/_TEMPLATE studies/MyStudy
+```
 
-# Edit YAML configs in studies/MyStudy/config/
+### 3. Edit YAML configs in `studies/MyStudy/config/`
+Customize entity YAML files to match your source data fields and target PCGL schema.
 
-# Run your data mapper
+### 4. Run the mapper
+
+**Single-file mode** (one CSV with all data):
+```bash
 python prototype_mapper.py --study_id MyStudy --input_csv data/source/your_data.csv --output_dir data/mapped/MyStudy/
 ```
 
-### Multi-File Mode 
+**Multi-file mode** (directory with multiple files):
 ```bash
-# Multiple source files split by domain
 python prototype_mapper.py --study_id MyStudy --input_dir data/source/MyStudy/ --output_dir data/mapped/MyStudy/
 ```
 
-See [Multi-File Configuration](studies/README.md#multi-file-source-configuration-new) for complete multi-file documentation and examples.
+### 5. Check the output
+- Mapped CSV files: `data/mapped/MyStudy/*.csv`
+- Mapping summary: `data/mapped/MyStudy/mapping_summary.txt`
+- Detailed logs: `prototype_mapper.log`
 
-## Project Structure
+
+
+## Data Mapper Structure
 
 ```
 data_mapper/
@@ -272,6 +287,6 @@ Run with verbose logging: check `prototype_mapper.log` for details.
 
 - **[core/README.md](core/README.md)** - Framework internals
   - Mapping pipeline flowchart
-  - Key classes (EntityMapper, StudyDataMapper, MappingConfig)
+  - Key classes (`EntityMapper`, `StudyDataMapper`, `MappingConfig`)
   - Record transforms and utilities
   - Usage examples
