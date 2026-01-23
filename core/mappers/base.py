@@ -1749,7 +1749,7 @@ class StudyDataMapper:
         # Save to file
         output_dir = Path(output_dir)
         report_path = output_dir / "mapping_summary.txt"
-        with open(report_path, 'w') as f:
+        with open(report_path, 'w', encoding='utf-8') as f:
             f.write(report)
         
         self.logger.info(f"Summary report saved: {report_path}")
