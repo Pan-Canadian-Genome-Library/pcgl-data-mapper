@@ -452,17 +452,120 @@ class EntityMapper:
             else:
                 self.logger.warning(f"Unknown preprocessing type: {step_type}")
         
-        # Apply field-based filters from configuration
-        field_filters = self.config.filters.get('field_filters', [])
-        if field_filters:
-            df = self._apply_field_filters(df, field_filters)
+        # Apply new unified filter structure
+        filters_config = self.config.filters
         
-        # Apply REDCap baseline/repeat instrument filtering
-        include_rows = self.config.filters.get('include_rows')
-        if include_rows:
-            df = self._apply_redcap_filtering(df)
+        # 1. Apply participant filtering (if configured)
+        participant_filter = filters_config.get('participant', {}).get('filter') if filters_config.get('participant') else None
+        if participant_filter:
+            df = self._apply_participant_filter(df, participant_filter)
+        
+        # 2. Apply row selection filtering (if configured)
+        rows_config = filters_config.get('rows', [])
+        if rows_config:
+            df = self._apply_row_selectors(df, rows_config)
+        
+        # 3. Merge baseline fields if configured
+        enrich_config = filters_config.get('enrich') or {}
+        merge_fields = enrich_config.get('merge_baseline_fields', [])
+        if merge_fields:
+            participant_id_field = filters_config.get('participant_id_field', 'participant_id')
+            # Extract baseline rows for merging
+            baseline_df = df[df.get('redcap_repeat_instrument', pd.Series([None]*len(df))).isna()].copy()
+            if len(baseline_df) > 0:
+                df = self._merge_baseline_fields(df, baseline_df, participant_id_field, merge_fields)
         
         return df
+    
+    def _apply_participant_filter(self, df: pd.DataFrame, participant_filter: List[Dict[str, Any]]) -> pd.DataFrame:
+        """
+        Apply participant eligibility filtering.
+        
+        Uses filters.participant.filter from YAML configuration.
+        Supports any/all boolean logic with nesting.
+        
+        Args:
+            df: DataFrame to filter
+            participant_filter: List of filter configurations
+            
+        Returns:
+            Filtered DataFrame
+        """
+        self.logger.info("Applying participant eligibility filters")
+        filtered_df, initial_count, final_count = self._apply_filters(df, participant_filter, "participant")
+        
+        total_excluded = initial_count - final_count
+        if total_excluded > 0:
+            retention_rate = 100 * final_count / initial_count if initial_count > 0 else 0
+            self.logger.info(
+                f"Participant filtering complete: {initial_count} → {final_count} participants "
+                f"(excluded {total_excluded}, retention {retention_rate:.1f}%)"
+            )
+        
+        return filtered_df
+    
+    def _apply_row_selectors(self, df: pd.DataFrame, rows_config: List[Dict[str, Any]]) -> pd.DataFrame:
+        """
+        Apply row selection filtering based on filters.rows configuration.
+        
+        Each row selector has a name and filter conditions.
+        All matching rows from all selectors are included (union).
+        
+        Example configuration:
+        ```yaml
+        filters:
+          rows:
+            - name: baseline
+              filter:
+                - field: redcap_repeat_instrument
+                  op: is_null
+            - name: lab_visits
+              filter:
+                - field: redcap_repeat_instrument
+                  op: equals
+                  value: laboratory
+        ```
+        
+        Args:
+            df: DataFrame to filter
+            rows_config: List of row selector configurations
+            
+        Returns:
+            DataFrame with selected rows
+        """
+        if not rows_config:
+            return df
+        
+        self.logger.info(f"Applying {len(rows_config)} row selector(s)")
+        
+        all_selected_rows = []
+        
+        for row_selector in rows_config:
+            selector_name = row_selector.get('name', 'unnamed')
+            row_filter = row_selector.get('filter', [])
+            
+            if not row_filter:
+                self.logger.warning(f"Row selector '{selector_name}' has no filter, skipping")
+                continue
+            
+            # Apply filter for this selector
+            selected_df, initial_count, final_count = self._apply_filters(df, row_filter, "row")
+            
+            if final_count > 0:
+                all_selected_rows.append(selected_df)
+                self.logger.info(f"Row selector '{selector_name}': selected {final_count} rows")
+            else:
+                self.logger.warning(f"Row selector '{selector_name}': no matching rows")
+        
+        if not all_selected_rows:
+            self.logger.warning("No rows matched any selector")
+            return pd.DataFrame(columns=df.columns)
+        
+        # Combine all selected rows (union)
+        result_df = pd.concat(all_selected_rows, ignore_index=True).drop_duplicates()
+        self.logger.info(f"Total rows after selection: {len(result_df)} (from {len(df)} input rows)")
+        
+        return result_df
     
     def _resolve_field_patterns(self, df: pd.DataFrame, field_patterns: list) -> list:
         """
@@ -511,186 +614,6 @@ class EntityMapper:
         
         return matched_fields
     
-    def _apply_redcap_filtering(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Apply REDCap baseline/repeat instrument filtering.
-        
-        Universal REDCap pattern that works for any study using REDCap.
-        Auto-detects REDCap structure and applies include_rows configuration.
-        
-        Configuration (YAML filters section):
-        ```yaml
-        filters:
-          eligible_participants: true  # Optional: triggers study-specific filtering
-          include_rows:
-            baseline: true
-            repeat_instruments: ["lab_results", "visits"]
-          merge_baseline_fields: ["dob_year", "sex"]
-          participant_id_field: "participant_id"
-        ```
-        
-        Args:
-            df: DataFrame to filter
-            
-        Returns:
-            Filtered DataFrame
-        """
-        # Check if this is REDCap data
-        is_redcap = 'redcap_repeat_instrument' in df.columns
-        
-        # Get configuration
-        participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
-        include_rows = self.config.filters.get('include_rows', {})
-        merge_fields = self.config.filters.get('merge_baseline_fields', [])
-        
-        # STEP 1: Handle non-REDCap data
-        if not is_redcap:
-            # For non-REDCap data, just apply eligibility filter if configured
-            if self.config.filters.get('eligible_participants', False):
-                self.logger.info("Applying participant eligibility filtering (non-REDCap)")
-                return self._filter_eligible_participants(df)
-            return df
-        
-        # STEP 2: Extract baseline rows
-        baseline_df = df[df['redcap_repeat_instrument'].isna()].copy()
-        self.logger.info(f"Found {len(baseline_df)} baseline records")
-        
-        # STEP 3: Apply eligibility filtering to baseline
-        if self.config.filters.get('eligible_participants', False):
-            self.logger.info("Applying participant eligibility filtering")
-            eligible_baseline = self._filter_eligible_participants(baseline_df)
-            eligible_ids = set(eligible_baseline[participant_id_field].unique())
-            self.logger.info(f"Found {len(eligible_ids)} eligible participants")
-        else:
-            eligible_baseline = baseline_df
-            eligible_ids = set(baseline_df[participant_id_field].unique())
-            self.logger.info(f"All {len(eligible_ids)} participants included (no eligibility filter)")
-        
-        # STEP 4: Include specified rows based on configuration
-        include_baseline = include_rows.get('baseline', True)
-        repeat_instruments = include_rows.get('repeat_instruments', [])
-        
-        rows_to_include = []
-        
-        # Include baseline rows for eligible participants
-        if include_baseline:
-            rows_to_include.append(eligible_baseline)
-            self.logger.info(f"Including {len(eligible_baseline)} baseline rows")
-        
-        # Include repeat instrument rows for eligible participants
-        if repeat_instruments:
-            for instrument in repeat_instruments:
-                instrument_rows = df[
-                    (df['redcap_repeat_instrument'] == instrument) &
-                    (df[participant_id_field].isin(eligible_ids))
-                ].copy()
-                rows_to_include.append(instrument_rows)
-                self.logger.info(f"Including {len(instrument_rows)} '{instrument}' repeat rows")
-        
-        if not rows_to_include:
-            self.logger.warning("No rows to include based on configuration")
-            return pd.DataFrame(columns=df.columns)
-        
-        # Combine all included rows
-        filtered_df = pd.concat(rows_to_include, ignore_index=True)
-        self.logger.info(f"Total rows after REDCap filtering: {len(filtered_df)}")
-        
-        # STEP 5: Merge baseline fields into repeat rows if needed
-        if merge_fields and repeat_instruments:
-            filtered_df = self._merge_baseline_fields(
-                filtered_df, 
-                eligible_baseline, 
-                participant_id_field, 
-                merge_fields
-            )
-        
-        return filtered_df
-    
-    def _filter_eligible_participants(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Filter for eligible participants based on study-specific criteria.
-        
-        Supports two patterns:
-        1. YAML Configuration (Simple): Define filters.participant_eligibility in YAML
-        2. Method Override (Complex): Override this method in study-specific mapper
-        
-        YAML Pattern (for simple AND-combined conditions):
-        ```yaml
-        filters:
-          eligible_participants: true
-          participant_eligibility:
-            - field: consent
-              operator: equals
-              value: 1
-            - field: age_years
-              operator: greater_equal
-              value: 18
-            - field: enrollment_status
-              operator: in
-              value: ["Active", "Complete"]
-        ```
-        
-        Override Pattern (for complex logic like HostSeq):
-        ```python
-        def _filter_eligible_participants(self, df: pd.DataFrame) -> pd.DataFrame:
-            # Complex multi-field logic with OR conditions, nested AND/OR, etc.
-            consent_mask = (df['consent'] == 0) | (df['consent'].isna())
-            covid_mask = (df['suspected'] == 1) & ((df['test'] == 0) | (df['test'] == 2))
-            return df[~(consent_mask | covid_mask)].copy()
-        ```
-        
-        Args:
-            df: DataFrame to filter (usually baseline records for REDCap)
-            
-        Returns:
-            Filtered DataFrame with only eligible participants
-        """
-        # Check if YAML eligibility conditions are configured
-        participant_eligibility = self.config.filters.get('participant_eligibility')
-        
-        if participant_eligibility:
-            # Use YAML-based filtering (expects list of filter dicts)
-            self.logger.info("Applying YAML-configured participant eligibility filters")
-            return self._apply_participant_eligibility_filters(df, participant_eligibility)
-        
-        # No YAML config - use default or override behavior
-        # If this method is overridden in subclass, the override will run
-        # Otherwise, return all participants (default stub behavior)
-        self.logger.debug("Using default eligibility filter (no exclusions)")
-        return df
-    
-    def _apply_participant_eligibility_filters(
-        self,
-        df: pd.DataFrame,
-        eligibility_conditions: List[Dict[str, Any]]
-    ) -> pd.DataFrame:
-        """
-        Apply YAML-configured participant eligibility filters.
-        
-        Uses same operators as field_filters for consistency.
-        See _apply_filters() for supported operators.
-        
-        Args:
-            df: DataFrame to filter
-            eligibility_conditions: List of filter configurations from YAML
-            
-        Returns:
-            Filtered DataFrame
-        """
-        filtered_df, initial_count, final_count = self._apply_filters(
-            df, eligibility_conditions, "eligibility"
-        )
-        
-        total_excluded = initial_count - final_count
-        if total_excluded > 0:
-            retention_rate = 100 * final_count / initial_count if initial_count > 0 else 0
-            self.logger.info(
-                f"Participant eligibility complete: {initial_count} → {final_count} participants "
-                f"(excluded {total_excluded}, retention {retention_rate:.1f}%)"
-            )
-        
-        return filtered_df
-    
     def _apply_filters(
         self,
         df: pd.DataFrame,
@@ -698,9 +621,14 @@ class EntityMapper:
         filter_type: str = "field"
     ) -> tuple:
         """
-        Apply filtering conditions to DataFrame (shared logic for field and eligibility filters).
+        Apply filtering conditions to DataFrame with support for any/all boolean logic.
         
-        All filters are combined with AND logic.
+        Filter Structure:
+        - Simple conditions: [{"field": "consent", "op": "equals", "value": 1}]
+        - AND logic (default): All conditions at same level must be true
+        - OR logic: {"any": [condition1, condition2, ...]} - any condition can be true
+        - AND logic (explicit): {"all": [condition1, condition2, ...]} - all conditions must be true
+        - Nesting: any/all can be nested arbitrarily deep
         
         Supported operators:
         - equals, not_equals: Field equals/doesn't equal value
@@ -713,7 +641,7 @@ class EntityMapper:
         Args:
             df: DataFrame to filter
             filters: List of filter configurations
-            filter_type: Type of filter for logging ("field" or "eligibility")
+            filter_type: Type of filter for logging ("field", "eligibility", or "participant")
             
         Returns:
             Tuple of (filtered_df, initial_count, final_count)
@@ -721,76 +649,161 @@ class EntityMapper:
         initial_count = len(df)
         
         for filter_config in filters:
-            field = filter_config.get('field')
-            operator = filter_config.get('operator')
-            value = filter_config.get('value')
-            
-            if not field or not operator:
-                self.logger.warning(f"Skipping incomplete {filter_type} filter: {filter_config}")
-                continue
-            
-            if field not in df.columns:
-                self.logger.warning(f"{filter_type.capitalize()} field '{field}' not found, skipping")
-                continue
-            
-            before_count = len(df)
-            
-            # Apply filter based on operator (no .copy() needed in loop)
-            if operator == 'equals':
-                df = df[df[field] == value]
-            elif operator == 'not_equals':
-                df = df[df[field] != value]
-            elif operator == 'in':
-                df = df[df[field].isin(value)]
-            elif operator == 'not_in':
-                df = df[~df[field].isin(value)]
-            elif operator == 'is_not_null':
-                df = df[df[field].notna()]
-            elif operator == 'is_null':
-                df = df[df[field].isna()]
-            elif operator == 'greater_than':
-                df = df[df[field] > value]
-            elif operator == 'less_than':
-                df = df[df[field] < value]
-            elif operator == 'greater_equal':
-                df = df[df[field] >= value]
-            elif operator == 'less_equal':
-                df = df[df[field] <= value]
-            elif operator == 'regex_match_any':
-                # Match records where field matches any of the regex patterns
-                if isinstance(value, list):
-                    try:
-                        df = df[df[field].astype(str).apply(
-                            lambda x: any(re.match(pattern, str(x)) for pattern in value)
-                        )]
-                    except re.error as e:
-                        self.logger.error(
-                            f"Invalid regex pattern in {filter_type} filter for field '{field}': {e}\n"
-                            f"Patterns: {value}\n"
-                            f"Hint: Special regex characters like *, +, ?, etc. need to be escaped or used correctly."
-                        )
-                        raise ValueError(
-                            f"Invalid regex pattern in field '{field}': {e}. "
-                            f"Check your filter configuration for special characters that need escaping."
-                        ) from e
-                else:
-                    self.logger.warning(f"regex_match_any expects a list of patterns, got {type(value)}")
-                    continue
+            # Check for any/all boolean logic
+            if 'any' in filter_config:
+                # OR logic - collect indices matching any condition
+                df = self._apply_any_filters(df, filter_config['any'], filter_type)
+            elif 'all' in filter_config:
+                # Explicit AND logic - recursively apply
+                df, _, _ = self._apply_filters(df, filter_config['all'], filter_type)
             else:
-                self.logger.warning(f"Unknown operator '{operator}', skipping")
-                continue
-            
-            after_count = len(df)
-            excluded = before_count - after_count
-            if excluded > 0:
-                label = "Eligibility filter" if filter_type == "eligibility" else "Field filter"
-                self.logger.info(
-                    f"{label}: {field} {operator} {value} "
-                    f"({before_count} → {after_count}, excluded {excluded})"
-                )
+                # Single condition
+                df = self._apply_single_filter(df, filter_config, filter_type)
         
         # Single copy at the end
         return df.copy(), initial_count, len(df)
+    
+    def _apply_single_filter(
+        self,
+        df: pd.DataFrame,
+        filter_config: Dict[str, Any],
+        filter_type: str = "field"
+    ) -> pd.DataFrame:
+        """
+        Apply a single filter condition to DataFrame.
+        
+        This method contains the actual operator logic and is called by both
+        _apply_filters (AND logic) and _apply_any_filters (OR logic).
+        
+        Args:
+            df: DataFrame to filter
+            filter_config: Single filter configuration dict
+            filter_type: Type of filter for logging
+            
+        Returns:
+            Filtered DataFrame (not copied - caller handles that)
+        """
+        field = filter_config.get('field')
+        operator = filter_config.get('operator') or filter_config.get('op')
+        value = filter_config.get('value')
+        
+        if not field or not operator:
+            self.logger.warning(f"Skipping incomplete {filter_type} filter: {filter_config}")
+            return df
+        
+        if field not in df.columns:
+            self.logger.warning(f"{filter_type.capitalize()} field '{field}' not found, skipping")
+            return df
+        
+        before_count = len(df)
+        
+        # Apply filter based on operator (no .copy() needed in loop)
+        if operator == 'equals':
+            df = df[df[field] == value]
+        elif operator == 'not_equals':
+            df = df[df[field] != value]
+        elif operator == 'in':
+            df = df[df[field].isin(value)]
+        elif operator == 'not_in':
+            df = df[~df[field].isin(value)]
+        elif operator == 'is_not_null':
+            df = df[df[field].notna()]
+        elif operator == 'is_null':
+            df = df[df[field].isna()]
+        elif operator == 'greater_than':
+            df = df[df[field] > value]
+        elif operator == 'less_than':
+            df = df[df[field] < value]
+        elif operator == 'greater_equal':
+            df = df[df[field] >= value]
+        elif operator == 'less_equal':
+            df = df[df[field] <= value]
+        elif operator == 'regex_match_any':
+            # Match records where field matches any of the regex patterns
+            if isinstance(value, list):
+                try:
+                    df = df[df[field].astype(str).apply(
+                        lambda x: any(re.match(pattern, str(x)) for pattern in value)
+                    )]
+                except re.error as e:
+                    self.logger.error(
+                        f"Invalid regex pattern in {filter_type} filter for field '{field}': {e}\n"
+                        f"Patterns: {value}\n"
+                        f"Hint: Special regex characters like *, +, ?, etc. need to be escaped or used correctly."
+                    )
+                    raise ValueError(
+                        f"Invalid regex pattern in field '{field}': {e}. "
+                        f"Check your filter configuration for special characters that need escaping."
+                    ) from e
+            else:
+                self.logger.warning(f"regex_match_any expects a list of patterns, got {type(value)}")
+                return df
+        else:
+            self.logger.warning(f"Unknown operator '{operator}', skipping")
+            return df
+        
+        after_count = len(df)
+        excluded = before_count - after_count
+        if excluded > 0:
+            label_map = {"eligibility": "Eligibility filter", "participant": "Participant filter", "field": "Field filter"}
+            label = label_map.get(filter_type, "Filter")
+            self.logger.info(
+                f"{label}: {field} {operator} {value} "
+                f"({before_count} → {after_count}, excluded {excluded})"
+            )
+        
+        return df
+    
+    def _apply_any_filters(
+        self,
+        df: pd.DataFrame,
+        filters: List[Dict[str, Any]],
+        filter_type: str = "field"
+    ) -> pd.DataFrame:
+        """
+        Apply OR logic to a list of filter conditions.
+        
+        Returns rows that match ANY of the conditions (union of all matching rows).
+        Supports nested any/all logic recursively.
+        
+        Args:
+            df: DataFrame to filter
+            filters: List of filter configurations (OR combined)
+            filter_type: Type of filter for logging
+            
+        Returns:
+            DataFrame with rows matching any condition (not copied - caller handles that)
+        """
+        if not filters:
+            return df
+        
+        # Collect indices that match any condition
+        matching_indices = set()
+        
+        for filter_config in filters:
+            # Check for nested any/all
+            if 'any' in filter_config:
+                # Nested OR - recursively apply
+                temp_df = self._apply_any_filters(df, filter_config['any'], filter_type)
+                matching_indices.update(temp_df.index)
+            elif 'all' in filter_config:
+                # Nested AND - recursively apply
+                temp_df, _, _ = self._apply_filters(df, filter_config['all'], filter_type)
+                matching_indices.update(temp_df.index)
+            else:
+                # Single condition - apply and collect matching indices
+                temp_df = self._apply_single_filter(df.copy(), filter_config, filter_type)
+                matching_indices.update(temp_df.index)
+        
+        # Return rows matching any condition
+        result_df = df.loc[list(matching_indices)]
+        
+        before_count = len(df)
+        after_count = len(result_df)
+        if before_count != after_count:
+            self.logger.info(f"OR filter: {before_count} → {after_count} rows (matched {after_count})")
+        
+        return result_df
     
     def _apply_field_filters(self, df: pd.DataFrame, field_filters: list) -> pd.DataFrame:
         """
