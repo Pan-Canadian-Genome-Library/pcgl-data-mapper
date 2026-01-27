@@ -119,7 +119,8 @@ class MappingConfig:
         
         # Configs for checkbox expansion (comorbidity, phenotype, etc.)
         # Changed from dict to list format: configs is now a list with source_field property
-        self.configs = config_dict.get('configs', []) or []
+        # Support range expansion for repetitive configs
+        self.configs = self._expand_range_configs(config_dict.get('configs', []) or [])
         
         # Common configuration fields - handle None values when keys exist but are empty
         self.preprocessing = config_dict.get('preprocessing', []) or []
@@ -250,6 +251,94 @@ class MappingConfig:
         raise ValueError(
             f"Entity '{entity_config.get('name')}': source_files must be a dict with 'primary' and 'secondary' keys"
         )
+    
+    def _expand_range_configs(self, configs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Expand range-based config templates into individual configs.
+        
+        Detects configs with range syntax and expands them:
+        - type: range (explicit) OR presence of start/end/template keys
+        - Replaces {n} placeholders in template with values from start to end
+        - Supports {n:02d} for zero-padded formatting
+        
+        Args:
+            configs: List of config dictionaries, may include range configs
+            
+        Returns:
+            Expanded list with range configs replaced by individual configs
+        """
+        if not configs:
+            return []
+        
+        expanded_configs = []
+        
+        for config in configs:
+            # Check if this is a range config
+            is_range = (
+                config.get('type') == 'range' or 
+                ('start' in config and 'end' in config and 'template' in config)
+            )
+            
+            if is_range:
+                # Extract range parameters
+                start = config.get('start')
+                end = config.get('end')
+                template = config.get('template')
+                
+                if not all([start is not None, end is not None, template is not None]):
+                    logger.warning(f"Incomplete range config, skipping: {config}")
+                    continue
+                
+                # Expand range
+                for n in range(start, end + 1):
+                    # Create a deep copy of the template
+                    expanded_config = self._substitute_placeholders(template, n)
+                    expanded_configs.append(expanded_config)
+            else:
+                # Regular config, add as-is
+                expanded_configs.append(config)
+        
+        return expanded_configs
+    
+    def _substitute_placeholders(self, obj: Any, n: int) -> Any:
+        """
+        Recursively substitute {n} placeholders in strings within a nested structure.
+        
+        Supports:
+        - {n} - replaced with the number
+        - {n:02d} - replaced with zero-padded number (e.g., 01, 02, ...)
+        - {n:03d} - 3-digit padding, etc.
+        
+        Args:
+            obj: Object to process (dict, list, str, or other)
+            n: Value to substitute for {n}
+            
+        Returns:
+            New object with placeholders substituted
+        """
+        if isinstance(obj, dict):
+            # Recursively process dictionary
+            return {k: self._substitute_placeholders(v, n) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            # Recursively process list
+            return [self._substitute_placeholders(item, n) for item in obj]
+        elif isinstance(obj, str):
+            # Substitute placeholders in string
+            # Support both {n} and {n:format} patterns
+            result = obj
+            # Replace formatted placeholders first (e.g., {n:02d})
+            import re
+            formatted_pattern = r'\{n:(\d+)d\}'
+            for match in re.finditer(formatted_pattern, result):
+                width = int(match.group(1))
+                formatted_value = str(n).zfill(width)
+                result = result.replace(match.group(0), formatted_value)
+            # Replace simple {n} placeholder
+            result = result.replace('{n}', str(n))
+            return result
+        else:
+            # Return as-is for other types
+            return obj
     
 
 class EntityMapper:
