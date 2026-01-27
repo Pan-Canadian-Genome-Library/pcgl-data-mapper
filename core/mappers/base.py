@@ -107,7 +107,6 @@ class MappingConfig:
         self.entity_fields_by_schema = fields_config
         
         self.entity_pattern = entity_config.get('pattern', 'direct')
-        self.custom_function = entity_config.get('function')  # For custom pattern
         self.pattern_params = entity_config.get('params', {})  # For any pattern
         # Allow custom prefix for code/term fields (default to entity name)
         self.code_term_prefix = entity_config.get('code_term_prefix', self.entity_name.lower())
@@ -356,8 +355,7 @@ class EntityMapper:
     def __init__(
         self,
         config: MappingConfig,
-        study_id: str,
-        custom_functions: Optional[Dict[str, Callable]] = None
+        study_id: str
     ):
         """
         Initialize entity mapper.
@@ -365,11 +363,9 @@ class EntityMapper:
         Args:
             config: Mapping configuration
             study_id: Study identifier (e.g., 'HostSeq', 'BQC19')
-            custom_functions: Optional dictionary of custom transformation functions
         """
         self.config = config
         self.study_id = study_id
-        self.custom_functions = custom_functions or {}
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         
         # Cache for field descriptions (used in note aggregation)
@@ -1156,22 +1152,18 @@ class EntityMapper:
         This method checks entity.pattern to determine mapping strategy:
         - 'direct': One-to-one mapping (one output record per input record)
         - 'expansion': Wide-to-long mapping (multiple output records per input record)
-        - 'custom': Custom transformation logic via entity.function
         
         Args:
             source_df: Preprocessed source DataFrame
             **kwargs: Additional arguments
             
         Returns:
-            DataFrame with mapped fields (direct, expanded, or custom)
+            DataFrame with mapped fields (direct, or expanded)
         """
         # Check entity pattern to determine mapping strategy
         if self.config.entity_pattern == 'expansion':
             # Use expansion pattern: wide-to-long conversion
             return self._map_expansion_pattern(source_df, **kwargs)
-        elif self.config.entity_pattern == 'custom':
-            # Use custom pattern: user-defined transformation
-            return self._map_custom_pattern(source_df, **kwargs)
         else:
             # Use direct pattern: one-to-one mapping
             return self._map_direct_pattern(source_df, **kwargs)
@@ -1293,43 +1285,7 @@ class EntityMapper:
         
         return pd.DataFrame(expanded_records)
     
-    def _map_custom_pattern(self, source_df: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        """
-        Map using custom pattern (user-defined transformation).
-        
-        Calls a custom expansion function from CUSTOM_FUNCTIONS to perform
-        arbitrary transformations. Use for complex wide-to-long conversions
-        that don't fit the standard checkbox expansion pattern.
-        
-        Args:
-            source_df: Source DataFrame
-            **kwargs: Additional arguments
-            
-        Returns:
-            DataFrame returned by custom function
-        """
-        if not self.config.custom_function:
-            raise ValueError(
-                f"Pattern 'custom' requires 'function' to be specified in entity config"
-            )
-        
-        if self.config.custom_function not in self.custom_functions:
-            raise ValueError(
-                f"Custom function '{self.config.custom_function}' not found in CUSTOM_FUNCTIONS. "
-                f"Available functions: {list(self.custom_functions.keys())}"
-            )
-        
-        custom_func = self.custom_functions[self.config.custom_function]
-        self.logger.info(f"Using custom pattern with function: {self.config.custom_function}")
-        
-        result_df = custom_func(
-            source_df=source_df,
-            config=self.config,
-            params=self.config.pattern_params,
-            **kwargs
-        )
-        
-        return result_df
+
     
     def _apply_field_mapping_to_record(
         self,
@@ -1818,14 +1774,12 @@ class StudyDataMapper:
     It handles:
     - Study directory auto-detection
     - Entity auto-discovery from YAML configs
-    - Dynamic loading of study-specific or default mappers
+    - Loading EntityMapper with YAML configuration
     - Batch processing of all entities
     - Results collection and reporting
     
-    The mapper automatically:
-    - Uses default EntityMapper if no custom code
-    - Detects and uses CUSTOM_FUNCTIONS if available
-    - Uses study-specific create_mapper() if defined
+    All mapping logic is driven by YAML configuration files.
+    No custom code or study-specific classes are needed.
     """
     
     def __init__(self, study_id: str, config_dir: Optional[Path] = None, 
@@ -1863,10 +1817,6 @@ class StudyDataMapper:
                 f"Expected YAML files in: {study_root}/{study_id}/config/"
             )
         
-        # Load mapper factory (study-specific or default)
-        self.custom_functions = {}
-        self.custom_create_mapper = self._load_custom_mapper()
-        
         self.mappers = {}
         self.results = {}
         self.stats = {
@@ -1890,49 +1840,10 @@ class StudyDataMapper:
         # Create entity mappers
         self._initialize_mappers()
     
-    def _load_custom_mapper(self) -> Optional[Callable]:
-        """
-        Load custom mapper function if available.
-        
-        Checks for study-specific create_mapper function and CUSTOM_FUNCTIONS.
-        Sets self.custom_functions and returns custom create_mapper if found.
-        
-        Returns:
-            Custom create_mapper function if available, otherwise None
-        """
-        module_path = f'studies.{self.study_id}.mappers'
-        
-        try:
-            # Try to import study-specific mapper module
-            self.logger.info(f"Attempting to load: {module_path}")
-            mapper_module = importlib.import_module(module_path)
-            
-            # Check for study-specific create_mapper function
-            if hasattr(mapper_module, 'create_mapper'):
-                self.logger.info(f"✓ Using study-specific create_mapper from {module_path}")
-                return mapper_module.create_mapper
-            
-            # Check for custom functions (without create_mapper)
-            if hasattr(mapper_module, 'CUSTOM_FUNCTIONS'):
-                self.custom_functions = mapper_module.CUSTOM_FUNCTIONS
-                self.logger.info(
-                    f"✓ Using default mapper with {len(self.custom_functions)} "
-                    f"custom functions from {module_path}"
-                )
-            else:
-                self.logger.info(f"Module {module_path} found but no create_mapper or CUSTOM_FUNCTIONS")
-                self.logger.info("✓ Using default mapper (no custom functions)")
-                
-        except ImportError:
-            # Module doesn't exist - use pure default
-            self.logger.info(f"No custom module found for {self.study_id}")
-            self.logger.info("✓ Using default mapper (no custom functions)")
-        
-        return None
-    
+
     def create_mapper(self, entity_name: str, study_id: str) -> EntityMapper:
         """
-        Create entity mapper (uses custom or default implementation).
+        Create entity mapper from YAML configuration.
         
         Args:
             entity_name: Name of entity to create mapper for
@@ -1941,11 +1852,6 @@ class StudyDataMapper:
         Returns:
             Configured EntityMapper instance
         """
-        # Use custom create_mapper if available
-        if self.custom_create_mapper:
-            return self.custom_create_mapper(entity_name, study_id)
-        
-        # Otherwise use default implementation
         config_file = self.config_dir / f'{entity_name}.yaml'
         
         if not config_file.exists():
@@ -1956,7 +1862,7 @@ class StudyDataMapper:
             )
         
         config = MappingConfig.from_yaml(config_file)
-        return EntityMapper(config, study_id, custom_functions=self.custom_functions)
+        return EntityMapper(config, study_id)
     
     def _discover_entities(self) -> List[str]:
         """
@@ -2284,13 +2190,7 @@ class StudyDataMapper:
         report.append("")
         report.append("MAPPER DESIGN:")
         report.append(f"  Study-Agnostic: Yes")
-        
-        # Check if using custom or default mapper
-        if self.custom_create_mapper:
-            report.append(f"  Implementation: Study-specific")
-        else:
-            report.append(f"  Implementation: Default (generic)")
-        
+        report.append(f"  Implementation: YAML-driven configuration")
         report.append(f"  Entities: {len(self.entities)}")
         report.append(f"  Config Files: {len(self.entities)} YAML files")
         
