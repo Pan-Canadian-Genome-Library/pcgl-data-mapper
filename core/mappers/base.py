@@ -454,16 +454,38 @@ class EntityMapper:
         
         # Apply new unified filter structure
         filters_config = self.config.filters
+        participant_id_field = filters_config.get('participant_id_field', 'participant_id')
         
-        # 1. Apply participant filtering (if configured)
-        participant_filter = filters_config.get('participant', {}).get('filter') if filters_config.get('participant') else None
-        if participant_filter:
-            df = self._apply_participant_filter(df, participant_filter)
+        # 1. Identify eligible participants
+        # Start with all participants, then apply filter if configured
+        if participant_id_field in df.columns:
+            eligible_participant_ids = set(df[participant_id_field].unique())
+            
+            participant_filter = filters_config.get('participant', {}).get('filter') if filters_config.get('participant') else None
+            if participant_filter:
+                eligible_participant_ids = self._get_eligible_participants(df, participant_filter)
+                
+                # Check if all participants were excluded
+                if not eligible_participant_ids:
+                    self.logger.warning("No eligible participants after applying participant filter")
+                    return pd.DataFrame(columns=df.columns)
+        else:
+            # Participant ID field not found - warn but continue without participant filtering
+            if filters_config.get('participant') or filters_config.get('rows'):
+                self.logger.warning(
+                    f"Participant ID field '{participant_id_field}' not found in data. "
+                    f"Participant/row filtering will be skipped."
+                )
+            eligible_participant_ids = None
         
         # 2. Apply row selection filtering (if configured)
         rows_config = filters_config.get('rows', [])
         if rows_config:
-            df = self._apply_row_selectors(df, rows_config)
+            df = self._apply_row_selectors(df, rows_config, eligible_participant_ids)
+        elif eligible_participant_ids is not None:
+            # No row selectors, but we have participant filtering applied - filter to eligible participants
+            df = df[df[participant_id_field].isin(eligible_participant_ids)].copy()
+            self.logger.info(f"Filtered to {len(eligible_participant_ids)} eligible participants")
         
         # 3. Merge baseline fields if configured
         enrich_config = filters_config.get('enrich') or {}
@@ -477,39 +499,61 @@ class EntityMapper:
         
         return df
     
-    def _apply_participant_filter(self, df: pd.DataFrame, participant_filter: List[Dict[str, Any]]) -> pd.DataFrame:
+    def _get_eligible_participants(self, df: pd.DataFrame, participant_filter: List[Dict[str, Any]]) -> set:
         """
-        Apply participant eligibility filtering.
+        Identify eligible participants based on filter criteria.
         
-        Uses filters.participant.filter from YAML configuration.
-        Supports any/all boolean logic with nesting.
+        Applies filters.participant.filter from YAML configuration to the dataset
+        and returns a deduplicated set of participant IDs from matching rows.
+        
+        Note: For REDCap data, only rows with the filter fields (typically baseline)
+        will match, naturally limiting evaluation to relevant rows.
         
         Args:
-            df: DataFrame to filter
+            df: DataFrame to evaluate
             participant_filter: List of filter configurations
             
         Returns:
-            Filtered DataFrame
+            Set of eligible participant IDs
         """
-        self.logger.info("Applying participant eligibility filters")
-        filtered_df, initial_count, final_count = self._apply_filters(df, participant_filter, "participant")
+        self.logger.info("Identifying eligible participants")
         
-        total_excluded = initial_count - final_count
-        if total_excluded > 0:
-            retention_rate = 100 * final_count / initial_count if initial_count > 0 else 0
+        participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
+        
+        if participant_id_field not in df.columns:
+            self.logger.warning(f"Participant ID field '{participant_id_field}' not found in data")
+            return set()
+        
+        initial_participants = df[participant_id_field].nunique()
+        
+        # Apply filter to all rows - rows without filter fields will be naturally excluded
+        filtered_df, _, _ = self._apply_filters(df, participant_filter, "participant")
+        eligible_participant_ids = set(filtered_df[participant_id_field].unique())
+        final_participants = len(eligible_participant_ids)
+        
+        excluded_participants = initial_participants - final_participants
+        if excluded_participants > 0:
+            retention_rate = 100 * final_participants / initial_participants if initial_participants > 0 else 0
             self.logger.info(
-                f"Participant filtering complete: {initial_count} → {final_count} participants "
-                f"(excluded {total_excluded}, retention {retention_rate:.1f}%)"
+                f"Participant eligibility: {initial_participants} → {final_participants} participants "
+                f"(excluded {excluded_participants}, retention {retention_rate:.1f}%)"
             )
         
-        return filtered_df
+        return eligible_participant_ids
     
-    def _apply_row_selectors(self, df: pd.DataFrame, rows_config: List[Dict[str, Any]]) -> pd.DataFrame:
+    def _apply_row_selectors(
+        self, 
+        df: pd.DataFrame, 
+        rows_config: List[Dict[str, Any]], 
+        eligible_participant_ids: Optional[set] = None
+    ) -> pd.DataFrame:
         """
         Apply row selection filtering based on filters.rows configuration.
         
         Each row selector has a name and filter conditions.
         All matching rows from all selectors are included (union).
+        
+        If eligible_participant_ids is provided, only rows for those participants are included.
         
         Example configuration:
         ```yaml
@@ -529,6 +573,7 @@ class EntityMapper:
         Args:
             df: DataFrame to filter
             rows_config: List of row selector configurations
+            eligible_participant_ids: Optional set of eligible participant IDs to filter to
             
         Returns:
             DataFrame with selected rows
@@ -563,7 +608,21 @@ class EntityMapper:
         
         # Combine all selected rows (union)
         result_df = pd.concat(all_selected_rows, ignore_index=True).drop_duplicates()
-        self.logger.info(f"Total rows after selection: {len(result_df)} (from {len(df)} input rows)")
+        self.logger.info(f"Total rows after row selection: {len(result_df)} (from {len(df)} input rows)")
+        
+        # Filter to eligible participants if provided
+        if eligible_participant_ids is not None:
+            participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
+            if participant_id_field in result_df.columns:
+                before_count = len(result_df)
+                result_df = result_df[result_df[participant_id_field].isin(eligible_participant_ids)].copy()
+                after_count = len(result_df)
+                
+                if before_count != after_count:
+                    self.logger.info(
+                        f"Filtered to {len(eligible_participant_ids)} eligible participants: "
+                        f"{before_count} → {after_count} rows"
+                    )
         
         return result_df
     
