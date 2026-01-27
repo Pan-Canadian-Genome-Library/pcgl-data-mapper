@@ -28,6 +28,7 @@ from .utils import (
     validate_participant_id,
     validate_age_in_days,
     read_data_file,
+    safe_int_conversion
 )
 from .record_transforms import (
     apply_value_to_record,
@@ -450,16 +451,80 @@ class EntityMapper:
         
         return final_df
     
+    def _construct_date_from_components(
+        self,
+        row: pd.Series,
+        df: pd.DataFrame,
+        year_field: str,
+        month_field: str,
+        day_field: Optional[str],
+        default_day: int
+    ) -> Optional[str]:
+        """
+        Construct date string from year/month/day components.
+        
+        Uses safe_int_conversion for robust parsing (handles "2,019", spaces, etc.).
+        
+        Args:
+            row: DataFrame row
+            df: Full DataFrame (for column checks)
+            year_field: Name of year field (required)
+            month_field: Name of month field (required)
+            day_field: Name of day field (optional)
+            default_day: Default day if not provided
+            
+        Returns:
+            Date string in YYYY-MM-DD format, or None if invalid
+        """
+        
+        # Year is required
+        year = row.get(year_field)
+        if pd.isna(year):
+            return None
+        
+        year_val = safe_int_conversion(year)
+        if not year_val:
+            return None
+        
+        # Month is required
+        month = row.get(month_field)
+        if pd.isna(month):
+            return None
+        
+        month_val = safe_int_conversion(month)
+        if not month_val:
+            return None
+        
+        # Get day (use default if not provided or field missing)
+        if day_field and day_field in df.columns:
+            day = row.get(day_field)
+            if pd.notna(day):
+                day_val = safe_int_conversion(day)
+            else:
+                day_val = default_day
+        else:
+            day_val = default_day
+        
+        if not day_val:
+            return None
+        
+        # Validate ranges
+        if not (1 <= month_val <= 12):
+            return None
+        if not (1 <= day_val <= 31):
+            return None
+        
+        # Format as YYYY-MM-DD
+        return f"{year_val}-{month_val:02d}-{day_val:02d}"
+    
     def preprocess(self, source_df: pd.DataFrame, **kwargs) -> pd.DataFrame:
         """
         Preprocess source data before mapping.
         
-        Applies preprocessing steps from YAML configuration:
-        - clean_numeric: Remove commas, spaces from numeric fields
-        - strip_whitespace: Remove leading/trailing whitespace
-        - uppercase/lowercase: Convert text case
-        - field_filters: Filter rows based on field values
-        - REDCap filtering: Handle baseline/repeat instruments (auto-detected)
+        Processing order (optimized for efficiency):
+        1. Apply filters first (on raw data)
+        2. Merge baseline fields (enrichment)
+        3. Clean and generate fields (only on filtered data)
         
         Override this method to add entity-specific or study-specific preprocessing.
         
@@ -472,14 +537,66 @@ class EntityMapper:
         """
         df = source_df.copy()
         
-        # Apply preprocessing steps from configuration
+        # ====================================================================
+        # STEP 1: Apply filters first (on raw data)
+        # ====================================================================
+        # Apply new unified filter structure
+        filters_config = self.config.filters
+        participant_id_field = filters_config.get('participant_id_field', 'participant_id')
+        
+        # 1. Identify eligible participants
+        # Start with all participants, then apply filter if configured
+        if participant_id_field in df.columns:
+            eligible_participant_ids = set(df[participant_id_field].unique())
+            
+            participant_filter = filters_config.get('participant', {}).get('filter') if filters_config.get('participant') else None
+            if participant_filter:
+                eligible_participant_ids = self._get_eligible_participants(df, participant_filter)
+                
+                # Check if all participants were excluded
+                if not eligible_participant_ids:
+                    self.logger.warning("No eligible participants after applying participant filter")
+                    return pd.DataFrame(columns=df.columns)
+        else:
+            # Participant ID field not found - warn but continue without participant filtering
+            if filters_config.get('participant') or filters_config.get('rows'):
+                self.logger.warning(
+                    f"Participant ID field '{participant_id_field}' not found in data. "
+                    f"Participant/row filtering will be skipped."
+                )
+            eligible_participant_ids = None
+        
+        # 2. Apply row selection filtering (if configured)
+        rows_config = filters_config.get('rows', [])
+        if rows_config:
+            df = self._apply_row_selectors(df, rows_config, eligible_participant_ids)
+        elif eligible_participant_ids is not None:
+            # No row selectors, but we have participant filtering applied - filter to eligible participants
+            df = df[df[participant_id_field].isin(eligible_participant_ids)].copy()
+            self.logger.info(f"Filtered to {len(eligible_participant_ids)} eligible participants")
+        
+        # ====================================================================
+        # STEP 2: Merge baseline fields (enrichment)
+        # ====================================================================
+        enrich_config = filters_config.get('enrich') or {}
+        merge_fields = enrich_config.get('merge_baseline_fields', [])
+        if merge_fields:
+            participant_id_field = filters_config.get('participant_id_field', 'participant_id')
+            # Extract baseline rows for merging
+            baseline_df = df[df.get('redcap_repeat_instrument', pd.Series([None]*len(df))).isna()].copy()
+            if len(baseline_df) > 0:
+                df = self._merge_baseline_fields(df, baseline_df, participant_id_field, merge_fields)
+        
+        # ====================================================================
+        # STEP 3: Clean and generate fields (after filtering and enrichment)
+        # This is more efficient - only process data that survived filtering
+        # ====================================================================
         for step in self.config.preprocessing:
             step_type = step.get('type')
             fields = step.get('fields', [])
             
             if step_type == 'clean_numeric':
                 # Remove commas, spaces from numeric fields
-                # Support field patterns (e.g., '*_numeric', 'measurement_*')
                 fields_to_clean = self._resolve_field_patterns(df, fields)
                 
                 for field in fields_to_clean:
@@ -523,8 +640,6 @@ class EntityMapper:
                     continue
                 
                 try:
-                    # Use pandas eval() for safe formula evaluation
-                    # Automatically handles column references and NaN propagation
                     df[target] = df.eval(formula)
                     self.logger.info(f"Calculated field '{target}' using formula: {formula}")
                 except Exception as e:
@@ -538,53 +653,39 @@ class EntityMapper:
                         f"Error: {e}"
                     ) from e
             
+            elif step_type == 'construct_date':
+                # Construct date from year/month/day components
+                target = step.get('target')
+                params = step.get('params', {})
+                
+                if not target:
+                    continue
+                
+                year_field = params.get('year_field')
+                month_field = params.get('month_field')
+                day_field = params.get('day_field')
+                default_day = params.get('default_day', 15)
+                
+                if not year_field or not month_field:
+                    continue
+                
+                try:
+                    df[target] = df.apply(
+                        lambda row: self._construct_date_from_components(row, df, year_field, month_field, day_field, default_day),
+                        axis=1
+                    )
+                    
+                    fields_desc = [year_field, month_field]
+                    if day_field:
+                        fields_desc.append(day_field)
+                    self.logger.info(f"Constructed date field '{target}' from {', '.join(fields_desc)}")
+                    
+                except Exception as e:
+                    self.logger.error(f"Error constructing date field '{target}': {e}")
+                    raise ValueError(f"Invalid construct_date configuration for '{target}': {e}") from e
+            
             else:
                 self.logger.warning(f"Unknown preprocessing type: {step_type}")
-        
-        # Apply new unified filter structure
-        filters_config = self.config.filters
-        participant_id_field = filters_config.get('participant_id_field', 'participant_id')
-        
-        # 1. Identify eligible participants
-        # Start with all participants, then apply filter if configured
-        if participant_id_field in df.columns:
-            eligible_participant_ids = set(df[participant_id_field].unique())
-            
-            participant_filter = filters_config.get('participant', {}).get('filter') if filters_config.get('participant') else None
-            if participant_filter:
-                eligible_participant_ids = self._get_eligible_participants(df, participant_filter)
-                
-                # Check if all participants were excluded
-                if not eligible_participant_ids:
-                    self.logger.warning("No eligible participants after applying participant filter")
-                    return pd.DataFrame(columns=df.columns)
-        else:
-            # Participant ID field not found - warn but continue without participant filtering
-            if filters_config.get('participant') or filters_config.get('rows'):
-                self.logger.warning(
-                    f"Participant ID field '{participant_id_field}' not found in data. "
-                    f"Participant/row filtering will be skipped."
-                )
-            eligible_participant_ids = None
-        
-        # 2. Apply row selection filtering (if configured)
-        rows_config = filters_config.get('rows', [])
-        if rows_config:
-            df = self._apply_row_selectors(df, rows_config, eligible_participant_ids)
-        elif eligible_participant_ids is not None:
-            # No row selectors, but we have participant filtering applied - filter to eligible participants
-            df = df[df[participant_id_field].isin(eligible_participant_ids)].copy()
-            self.logger.info(f"Filtered to {len(eligible_participant_ids)} eligible participants")
-        
-        # 3. Merge baseline fields if configured
-        enrich_config = filters_config.get('enrich') or {}
-        merge_fields = enrich_config.get('merge_baseline_fields', [])
-        if merge_fields:
-            participant_id_field = filters_config.get('participant_id_field', 'participant_id')
-            # Extract baseline rows for merging
-            baseline_df = df[df.get('redcap_repeat_instrument', pd.Series([None]*len(df))).isna()].copy()
-            if len(baseline_df) > 0:
-                df = self._merge_baseline_fields(df, baseline_df, participant_id_field, merge_fields)
         
         return df
     
@@ -1301,7 +1402,7 @@ class EntityMapper:
             
             elif target_type == 'age':
                 params = field_config.get('params', {})
-                apply_age_to_record(record, target_field, source_row, params, self.custom_functions)
+                apply_age_to_record(record, target_field, source_row, params)
             
             elif target_type == 'note':
                 note_fields = field_config.get('source_field', [])
