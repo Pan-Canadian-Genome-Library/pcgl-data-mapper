@@ -7,26 +7,22 @@ Generic, reusable components for PCGL data mapping. No study-specific code allow
 ```
 core/
 ├── mappers/
-│   ├── base.py              # EntityMapper & StudyDataMapper classes
-│   ├── utils.py             # Field mapping & transformation utilities
-│   └── record_transforms.py # Record-level transformations
-└── validators/
-    ├── yaml_validator.py    # YAML config validation
-    └── compare_*.py         # Data comparison tools
+    ├── base.py              # EntityMapper & StudyDataMapper classes
+    ├── utils.py             # Field mapping & transformation utilities
+    └── record_transforms.py # Record-level transformations
+
 ```
 
 ## Mapping Pipeline
 
 ```mermaid
 flowchart LR
-    A[Source CSV] --> B[Preprocess<br/>clean & filter]
+    A[Source CSV] --> B[Preprocess<br/>filter, enrich,<br/>clean & generate]
     B --> C{Pattern?}
     C -->|direct| D[Map 1:1]
-    C -->|expansion| E[Map 1:N<br/>checkboxes<br/>uses params]
-    C -->|custom| F[Map 1:N<br/>function from CUSTOM_FUNCTIONS<br/>uses function + params]
+    C -->|expansion| E[Map 1:N<br/>checkboxes]
     D --> G[Post-process<br/>types & cleanup]
     E --> G
-    F --> G
     G --> H[Validate<br/>quality checks]
     H --> I[Mapped CSV]
     
@@ -36,15 +32,21 @@ flowchart LR
 
 **Pipeline Details:**
 
-1. **Preprocess** - Clean and filter source data
-   - Data cleaning: `clean_numeric`, `strip_whitespace`, `uppercase/lowercase`
-   - Row filtering: eligibility criteria, REDCap baseline/repeat instruments, field filters
-   - YAML config: `preprocessing`, `filters`
+1. **Preprocess** - Filter, enrich, and clean source data (optimized order)
+   - **Step 1**: Apply filters first on raw data (most efficient)
+     - Participant eligibility: `filters.participant.filter`
+     - Row selection: `filters.rows[].filter`
+   - **Step 2**: Merge baseline fields for REDCap repeat instruments
+     - `filters.enrich.merge_baseline_fields`
+   - **Step 3**: Clean and generate fields (only on filtered data)
+     - Data cleaning: `clean_numeric`, `strip_whitespace`, `uppercase/lowercase`
+     - Field generation: `calculate_field`, `construct_date`
+   - YAML config: `filters`, `preprocessing`
 
 2. **Map Fields** - Transform source to target schema
-   - Pattern: Direct (1:1) for most entities, Expansion (1:N) for checkboxes, Custom (1:N) for complex transformations
+   - Pattern: Direct (1:1) for most entities, Expansion (1:N) for checkboxes
    - Transforms: value mappings, age/duration calculation, ID generation, date formatting
-   - Custom functions: execute study-specific logic from CUSTOM_FUNCTIONS
+   - Range expansion: Auto-generate repetitive configs with `{n}` placeholders
    - YAML config: `mappings`, `configs`
 
 3. **Post-process** - Clean mapped data
@@ -93,11 +95,11 @@ mapper = EntityMapper(config, study_id='MyStudy')
 Maps a single entity from source data to PCGL schema using YAML configuration.
 
 **Features:**
-- Three patterns: Direct (1:1), Expansion (1:N checkboxes), Custom (1:N via user function)
+- Two patterns: Direct (1:1), Expansion (1:N checkboxes)
 - Field transforms: value mappings, calculated ages/durations, ID generation, date formatting
 - Checkbox handling: aggregate into single field or expand to multiple records
 - REDCap support: baseline/repeat filtering, field merging for longitudinal data
-- Custom functions: integrate study-specific logic via CUSTOM_FUNCTIONS dict
+- Range expansion: Auto-generate repetitive configs using template syntax
 - Extensible: override `preprocess()`, `postprocess()`, or other methods for complex needs
 
 **Usage:** `map(source_df)` runs the full pipeline and returns mapped DataFrame.
@@ -113,8 +115,7 @@ Orchestrates processing for an entire study by auto-discovering and running all 
 
 **Features:**
 - Auto-discovers YAML configs in `studies/{study_id}/config/*.yaml`
-- Loads custom mappers from `studies.{study_id}.mappers` if available (falls back to default EntityMapper)
-- Imports CUSTOM_FUNCTIONS for study-specific transforms
+- Uses pure YAML-driven EntityMapper for all entities
 - Processes all entities in sequence
 - Collects results and generates summary statistics
 

@@ -1,6 +1,6 @@
 # PCGL Data Mapper
 
-YAML-driven framework for mapping research data to PCGL schema. Most studies need only YAML configs, no Python code changes required.
+YAML-driven framework for mapping research data to PCGL data model. 
 
 ## Installation
 
@@ -83,12 +83,9 @@ data_mapper/
 │   ├── HostSeq/           # Production example (15 entities)
 │   └── YourStudy/
 │       ├── config/        # YAML entity configs (required)
-│       │   ├── participant.yaml
-│       │   ├── diagnosis.yaml
-│       │   └── ...
-│       └── mappers/       # Custom Python code (optional)
-│           ├── __init__.py
-│           └── transforms.py
+│          ├── participant.yaml
+│          ├── diagnosis.yaml
+│          └── ...
 ├── core/                  # Framework code (generic, reusable)
 ├── data/
 │   ├── source/            # Input CSV files
@@ -102,8 +99,8 @@ data_mapper/
 
 The mapper runs 5 steps for each entity:
 
-1. **Preprocess** - Clean data, filter rows (YAML: `preprocessing`, `filters`)
-2. **Map** - Transform fields (YAML: `mappings`, `configs`, pattern: `direct`/`expansion`/`custom`)  
+1. **Preprocess** - Apply filters, merge baseline fields, then clean/generate fields (YAML: `filters`, `preprocessing`)
+2. **Map** - Transform fields (YAML: `mappings`, `configs`, pattern: `direct`/`expansion`)  
 3. **Post-process** - Type conversion, cleanup (YAML: `post_processing`)
 4. **Validate** - Quality checks (YAML: `validations`)
 5. **Output** - Export CSV, log stats
@@ -112,13 +109,13 @@ See [core/README.md](core/README.md) for pipeline flowchart and details.
 
 ## YAML Configurations
 
-Each entity has a YAML file with up to 7 sections. Most studies only need `entity` and `mappings`.
+Each entity has a YAML file with up to 7 sections. Most entities only need `entity` and `mappings`.
 
 **Minimal example:**
 ```yaml
 entity:
   name: Participant
-  pattern: direct  # Options: 'direct', 'expansion', 'custom'
+  pattern: direct  # Options: 'direct' or 'expansion'
   fields:
     base: [submitter_participant_id, study_id]
 
@@ -149,8 +146,8 @@ mappings:
 
 **Complete config sections:**
 - `entity` - Name, schema, fields, pattern (required)
-- `preprocessing` - Data cleaning (optional)
-- `filters` - Row filtering (optional)
+- `filters` - Participant eligibility check and row filtering (optional)
+- `preprocessing` - Data cleaning and generation applied to source data before mapping (optional)
 - `mappings` - Field transforms (required)
 - `configs` - Expansion configs for checkboxes (expansion pattern only)
 - `post_processing` - Type conversion, cleanup (optional)
@@ -168,76 +165,10 @@ entity:
   params:
     selection_type: radio
     skip_values: [0, -1]
-
-# Custom (1:N user function)
-entity:
-  pattern: custom
-  function: my_transform_function
-  params:
-    # any params your function needs
 ```
 
 See [studies/README.md](studies/README.md) for complete YAML documentation and all supported options.
 
-## Customizations (Optional)
-
-Most studies work with YAML only. Only add Python code for complex logic:
-
-**Custom functions:**
-```python
-# studies/MyStudy/mappers/__init__.py
-CUSTOM_FUNCTIONS = {
-    'construct_birth_date': my_function
-}
-```
-
-Reference in YAML:
-```yaml
-- target_field: age_at_enrollment
-  target_type: age
-  params:
-    birth_date_transform: construct_birth_date
-```
-
-**Custom mappers:**
-
-For complex logic that can't be expressed in YAML, create a custom mapper class in `studies/YourStudy/mappers/base.py`:
-
-```python
-# studies/YourStudy/mappers/base.py
-from core.mappers.base import EntityMapper
-
-class StudyEntityMapper(EntityMapper):
-    def _filter_eligible_participants(self, df):
-        """Custom eligibility logic with complex conditions."""
-        # Example: Multi-field logic with OR conditions
-        consent_mask = (df['consent'] == 0) | (df['consent'].isna())
-        age_mask = df['age_years'] < 18
-        return df[~(consent_mask | age_mask)].copy()
-    
-    def preprocess(self, source_df, **kwargs):
-        """Override for custom preprocessing."""
-        df = super().preprocess(source_df, **kwargs)
-        # Add custom preprocessing steps here
-        return df
-```
-
-Then reference it in your mapper module:
-```python
-# studies/YourStudy/mappers/__init__.py
-from .base import StudyEntityMapper
-
-def create_mapper(config, study_id, custom_functions):
-    return StudyEntityMapper(config, study_id, custom_functions)
-```
-
-**Common override methods:**
-- `_filter_eligible_participants()` - Complex eligibility filtering
-- `preprocess()` - Custom data cleaning before mapping
-- `postprocess()` - Custom cleanup after mapping
-- `_map_expansion_pattern()` - Custom wide-to-long transformations
-
-See `studies/HostSeq/mappers/base.py` for production example.
 
 ## Troubleshooting
 
@@ -252,9 +183,9 @@ See `studies/HostSeq/mappers/base.py` for production example.
 - Use `age_fallback_field` if that's applicable to your use case
 
 **Records filtered out**
-- Check `filters.eligible_participants` logic
-- Verify `include_rows` settings for REDCap data
-- Review `field_filters` conditions
+- Check logics defined in `filters` 
+- Verify `validations` settings 
+- Review `post_process` conditions
 
 Run with verbose logging: check `prototype_mapper.log` for details.
 
@@ -271,8 +202,6 @@ Run with verbose logging: check `prototype_mapper.log` for details.
 **HostSeq study** - Complete production example with 15 entities (13 base + 2 extension)
 - Direct mapping entities: participant, demographic, specimen, sample, diagnosis, sociodemographic, demographic, hla
 - Expansion mapping entities: comorbidity, medication, treatment, phenotype, procedure, measurement
-- Custom expansion mapping entities: household
-- Custom code: eligibility filtering, birth date construction, household expansion
 - See `studies/HostSeq/config/*.yaml` for advanced working configs
 
 **_TEMPLATE** - Starting point for new studies with pre-configured YAML files and inline documentation.
