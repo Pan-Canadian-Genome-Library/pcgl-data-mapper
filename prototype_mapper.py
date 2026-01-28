@@ -5,23 +5,6 @@ PCGL Data Mapper - Generic Study Processor
 Configuration-driven data mapping framework for processing study data using YAML 
 entity configurations and the generic mapper factory pattern.
 
-Usage:
-    python prototype_mapper.py --study_id <id> --input_csv <path> --output_dir <path>
-    python prototype_mapper.py -h
-
-Example:
-    python prototype_mapper.py --study_id StudyA --input_csv data/source/input.csv --output_dir data/mapped/
-
-Adding a New Study:
-    Minimal (no custom code):
-        1. Create studies/StudyName/config/ with YAML entity configs
-        2. Run the mapper
-    
-    With custom functions:
-        1. Create studies/StudyName/config/ with YAML entity configs
-        2. Add studies/StudyName/mappers/__init__.py with CUSTOM_FUNCTIONS or create_mapper()
-        3. Run the mapper
-
 """
 
 import sys
@@ -67,12 +50,14 @@ def main():
     input_group.add_argument('--input_dir', type=Path, help='Directory containing source CSV files (multi-file mode)')
     
     parser.add_argument('--output_dir', type=Path, help='Output directory for mapped files')
+    parser.add_argument('--study_config_dir', type=Path, help='Root directory containing study configs (default: ./studies/)')
     args = parser.parse_args()
     
     study_id = args.study_id
     input_csv_path = args.input_csv
     input_dir_path = args.input_dir
     output_dir = args.output_dir
+    study_config_dir = args.study_config_dir
     
     # Validate input
     if input_csv_path and not input_csv_path.exists():
@@ -85,7 +70,7 @@ def main():
     
     try:
         # Initialize mapper (auto-discovers entities, dynamically loads study module)
-        mapper = StudyDataMapper(study_id=study_id)
+        mapper = StudyDataMapper(study_id=study_id, study_root=study_config_dir)
         
         # Determine mode and process accordingly
         if input_csv_path:

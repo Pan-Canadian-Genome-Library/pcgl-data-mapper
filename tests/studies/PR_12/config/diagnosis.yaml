@@ -1,0 +1,72 @@
+# PR_12 Study - Diagnosis Configuration
+
+entity:
+  name: Diagnosis
+  fields:
+    base:
+      - submitter_participant_id
+      - submitter_diagnosis_id
+      - diagnosis_code
+      - diagnosis_term
+      - age_at_diagnosis
+  pattern: direct
+  
+  # 1. Multi-file input with primary and secondary files with different formats
+  source_files:
+    primary: "demographics.csv"
+    secondary: # 2. join the input files to get diagnosis info
+      - file: "clinical.tsv"
+        join_on: participant_id
+        join_type: left
+
+
+filters:
+  participant_id_field: "participant_id"
+  
+  # 3. Refined filter structure to support combined inclusion rules
+  participant:
+    filter:
+      # Must have consent_date (not null)
+      - field: consent_date
+        op: not_null
+      
+      # AND diagnosis must be COVID-19 or viral pneumonia cases (using 'any' for OR logic)
+      - any:
+          - field: diagnosis_code
+            op: equals
+            value: "U07.1"      # COVID-19
+          - field: diagnosis_code
+            op: equals
+            value: "J12.89"     # Other viral pneumonia
+
+
+preprocessing:
+  # 4. Calculate field - compute age in days at diagnosis
+  - type: calculate_field
+    target: age_at_diagnosis_days
+    formula: "diag_age * 365.25"
+  
+
+mappings:
+  - source_field: participant_id
+    target_field: submitter_participant_id
+  
+  - target_field: submitter_diagnosis_id
+    target_type: identifier
+    params:
+      prefix_field: participant_id
+      type: diagnosis
+  
+  - source_field: diagnosis_code
+    target_field: diagnosis_code
+  
+  - source_field: diagnosis_name
+    target_field: diagnosis_term
+  
+  - source_field: age_at_diagnosis_days
+    target_field: age_at_diagnosis
+
+
+post_processing:
+  - type: convert_nullable_int
+    columns: auto
