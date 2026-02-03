@@ -28,7 +28,7 @@ filters:
     filter:
       # Must have consent_date (not null)
       - field: consent_date
-        op: not_null
+        op: is_not_null
       
       # AND diagnosis must be COVID-19 or viral pneumonia cases (using 'any' for OR logic)
       - any:
