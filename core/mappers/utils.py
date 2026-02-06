@@ -69,12 +69,27 @@ def read_data_file(file_path: Path) -> pd.DataFrame:
     else:  # .csv or others
         delimiter = ','
     
-    # Read with appropriate delimiter
+    # Read with appropriate delimiter and encoding fallbacks
+    encodings_to_try = ['utf-8', 'utf-8-sig', 'latin1']
+    last_error = None
+
+    for encoding in encodings_to_try:
+        try:
+            if delimiter:
+                df = pd.read_csv(file_path, sep=delimiter, encoding=encoding)
+            else:
+                # Let pandas auto-detect (works for most cases)
+                df = pd.read_csv(file_path, sep=None, engine='python', encoding=encoding)
+            return df
+        except UnicodeDecodeError as exc:
+            last_error = exc
+            continue
+
+    # Final fallback: replace undecodable characters
     if delimiter:
-        df = pd.read_csv(file_path, sep=delimiter)
+        df = pd.read_csv(file_path, sep=delimiter, encoding='utf-8', errors='replace')
     else:
-        # Let pandas auto-detect (works for most cases)
-        df = pd.read_csv(file_path, sep=None, engine='python')
+        df = pd.read_csv(file_path, sep=None, engine='python', encoding='utf-8', errors='replace')
     
     return df
 
@@ -320,11 +335,13 @@ def calculate_age_in_days(
             # Parse birth date - handle multiple formats
             birth_dt = parse_date(birth_date, assume_mid_month)
             if birth_dt is None:
+                logger.warning(f"Could not parse birth_date: {birth_date}")
                 raise ValueError(f"Could not parse birth_date: {birth_date}")
             
             # Parse event date - handle multiple date formats
             event_dt = parse_date(event_date, assume_mid_month)
             if event_dt is None:
+                logger.warning(f"Could not parse event_date: {event_date}")
                 raise ValueError(f"Could not parse event_date: {event_date}")
             
             # Calculate days difference

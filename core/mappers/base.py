@@ -518,9 +518,10 @@ class EntityMapper:
         Preprocess source data before mapping.
         
         Processing order (optimized for efficiency):
-        1. Apply filters first (on raw data)
-        2. Merge baseline fields (enrichment)
-        3. Clean and generate fields (only on filtered data)
+        1. Apply participant filters (on raw data)
+        2. Enrichment - merge from full dataset before row selection
+        3. Apply row selection (select latest/first/etc per participant)
+        4. Clean and generate fields (preprocessing)
         
         Override this method to add entity-specific or study-specific preprocessing.
         
@@ -534,7 +535,7 @@ class EntityMapper:
         df = source_df.copy()
         
         # ====================================================================
-        # STEP 1: Apply filters first (on raw data)
+        # STEP 1: Apply participant filters (on raw data)
         # ====================================================================
         # Apply new unified filter structure
         filters_config = self.config.filters
@@ -553,6 +554,10 @@ class EntityMapper:
                 if not eligible_participant_ids:
                     self.logger.warning("No eligible participants after applying participant filter")
                     return pd.DataFrame(columns=df.columns)
+                
+                # Filter to eligible participants only (keep all their rows for enrichment)
+                df = df[df[participant_id_field].isin(eligible_participant_ids)].copy()
+                self.logger.info(f"Filtered to {len(eligible_participant_ids)} eligible participants")
         else:
             # Participant ID field not found - warn but continue without participant filtering
             if filters_config.get('participant') or filters_config.get('rows'):
@@ -562,30 +567,47 @@ class EntityMapper:
                 )
             eligible_participant_ids = None
         
-        # 2. Apply row selection filtering (if configured)
+        # ====================================================================
+        # STEP 2: Enrichment - Merge fields from full dataset BEFORE row selection
+        # This is critical: we need all rows (baseline, follow-ups) available
+        # to merge from, before we select the final row per participant
+        # ====================================================================
+        enrich_config = filters_config.get('enrich') or []
+        
+        # Unified list format
+        if isinstance(enrich_config, list):
+            for merge_config in enrich_config:
+                if not merge_config:
+                    continue
+                
+                merge_name = merge_config.get('name', 'unnamed')
+                fields_to_merge = merge_config.get('fields', [])
+                source_filter = merge_config.get('source', [])
+                select_mode = merge_config.get('select', 'first')  # 'first', 'last', or 'all'
+                
+                if not source_filter or not fields_to_merge:
+                    self.logger.warning(f"Enrichment '{merge_name}' missing 'source' or 'fields', skipping")
+                    continue
+                
+                # Apply filter to get source rows from full dataset
+                source_df, _, source_count = self._apply_filters(df, source_filter, "enrichment")
+                
+                if source_count > 0:
+                    df = self._merge_fields_from_source(df, source_df, participant_id_field, fields_to_merge, merge_name, select_mode)
+                else:
+                    self.logger.warning(f"Enrichment '{merge_name}': no matching source rows")
+                
+        # ====================================================================
+        # STEP 3: Apply row selection (AFTER enrichment)
+        # Now that all rows have been enriched with merged fields,
+        # we can safely select specific rows per participant
+        # ====================================================================
         rows_config = filters_config.get('rows', [])
         if rows_config:
             df = self._apply_row_selectors(df, rows_config, eligible_participant_ids)
-        elif eligible_participant_ids is not None:
-            # No row selectors, but we have participant filtering applied - filter to eligible participants
-            df = df[df[participant_id_field].isin(eligible_participant_ids)].copy()
-            self.logger.info(f"Filtered to {len(eligible_participant_ids)} eligible participants")
-        
+                    
         # ====================================================================
-        # STEP 2: Merge baseline fields (enrichment)
-        # ====================================================================
-        enrich_config = filters_config.get('enrich') or {}
-        merge_fields = enrich_config.get('merge_baseline_fields', [])
-        if merge_fields:
-            participant_id_field = filters_config.get('participant_id_field', 'participant_id')
-            # Extract baseline rows for merging
-            baseline_df = df[df.get('redcap_repeat_instrument', pd.Series([None]*len(df))).isna()].copy()
-            if len(baseline_df) > 0:
-                df = self._merge_baseline_fields(df, baseline_df, participant_id_field, merge_fields)
-        
-        # ====================================================================
-        # STEP 3: Clean and generate fields (after filtering and enrichment)
-        # This is more efficient - only process data that survived filtering
+        # STEP 4: Clean and generate fields (preprocessing on selected rows)
         # ====================================================================
         for step in self.config.preprocessing:
             step_type = step.get('type')
@@ -626,6 +648,52 @@ class EntityMapper:
                         df[field] = df[field].astype(str).str.lower()
                         self.logger.debug(f"Converted to lowercase: {field}")
             
+            elif step_type == 'replace_missing_codes':
+                # Replace missing data codes with numeric values or NaN, and convert column to numeric
+                missing_codes = step.get('codes', {})  # Dict mapping codes to replacement values, or list of codes to replace with NaN
+                
+                # Support both dict (code → value) and list (codes → NaN) formats
+                if isinstance(missing_codes, list):
+                    # List format: replace all codes with NaN
+                    code_mappings = {code: None for code in missing_codes}
+                else:
+                    # Dict format: explicit code → value mappings
+                    code_mappings = missing_codes
+                
+                # If fields is empty or not provided, apply to all columns
+                if not fields:
+                    fields_to_process = df.columns.tolist()
+                    self.logger.info(f"No fields specified, applying to all {len(fields_to_process)} columns")
+                else:
+                    fields_to_process = fields
+                
+                for field in fields_to_process:
+                    if field in df.columns:
+                        # Replace missing codes with numeric values (or NaN)
+                        df[field] = df[field].replace(code_mappings)
+                        
+                        # Convert to numeric (coerce any remaining non-numeric to NaN)
+                        df[field] = pd.to_numeric(df[field], errors='coerce')
+                        
+                        self.logger.debug(f"Replaced codes and converted to numeric: {field} (dtype={df[field].dtype})")
+                
+                if fields_to_process:
+                    self.logger.info(f"Replaced missing codes and converted {len(fields_to_process)} fields to numeric: {code_mappings}")
+            
+            elif step_type == 'convert_to_numeric':
+                # Convert string columns to numeric after replacing missing codes
+                # Handles: "1" → 1 or 1.0, "MSK" (if not replaced) → NaN
+                errors = step.get('errors', 'coerce')  # 'coerce' converts non-numeric to NaN
+                downcast = step.get('downcast')  # Optional: 'integer', 'signed', 'unsigned', 'float'
+                
+                for field in fields:
+                    if field in df.columns:
+                        df[field] = pd.to_numeric(df[field], errors=errors, downcast=downcast)
+                        self.logger.debug(f"Converted to numeric: {field} (dtype={df[field].dtype})")
+                
+                if fields:
+                    self.logger.info(f"Converted {len(fields)} fields to numeric")
+            
             elif step_type == 'calculate_field':
                 # Calculate new field using pandas eval() with formula
                 target = step.get('target')
@@ -638,6 +706,7 @@ class EntityMapper:
                 try:
                     df[target] = df.eval(formula)
                     self.logger.info(f"Calculated field '{target}' using formula: {formula}")
+                        
                 except Exception as e:
                     self.logger.error(
                         f"Error calculating field '{target}' with formula '{formula}': {e}\n"
@@ -739,22 +808,12 @@ class EntityMapper:
         Each row selector has a name and filter conditions.
         All matching rows from all selectors are included (union).
         
-        If eligible_participant_ids is provided, only rows for those participants are included.
+        Supports 'select' parameter:
+        - 'all': Include all matching rows (default)
+        - 'first': Take first row per participant (ordered by appearance)
+        - 'last': Take last row per participant (ordered by appearance)
         
-        Example configuration:
-        ```yaml
-        filters:
-          rows:
-            - name: baseline
-              filter:
-                - field: redcap_repeat_instrument
-                  op: is_null
-            - name: lab_visits
-              filter:
-                - field: redcap_repeat_instrument
-                  op: equals
-                  value: laboratory
-        ```
+        If eligible_participant_ids is provided, only rows for those participants are included.
         
         Args:
             df: DataFrame to filter
@@ -769,11 +828,13 @@ class EntityMapper:
         
         self.logger.info(f"Applying {len(rows_config)} row selector(s)")
         
+        participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
         all_selected_rows = []
         
         for row_selector in rows_config:
             selector_name = row_selector.get('name', 'unnamed')
             row_filter = row_selector.get('filter', [])
+            select_mode = row_selector.get('select', 'all')  # 'all', 'first', 'last'
             
             if not row_filter:
                 self.logger.warning(f"Row selector '{selector_name}' has no filter, skipping")
@@ -782,11 +843,30 @@ class EntityMapper:
             # Apply filter for this selector
             selected_df, initial_count, final_count = self._apply_filters(df, row_filter, "row")
             
-            if final_count > 0:
-                all_selected_rows.append(selected_df)
-                self.logger.info(f"Row selector '{selector_name}': selected {final_count} rows")
-            else:
+            if final_count == 0:
                 self.logger.warning(f"Row selector '{selector_name}': no matching rows")
+                continue
+            
+            # Apply selection strategy
+            if select_mode != 'all' and participant_id_field in selected_df.columns:
+                before_selection = len(selected_df)
+                
+                if select_mode == 'first':
+                    selected_df = selected_df.groupby(participant_id_field, as_index=False, sort=False).first()
+                elif select_mode == 'last':
+                    selected_df = selected_df.groupby(participant_id_field, as_index=False, sort=False).last()
+                else:
+                    self.logger.warning(f"Unknown select mode '{select_mode}', using 'all'")
+                
+                after_selection = len(selected_df)
+                self.logger.info(
+                    f"Row selector '{selector_name}': {before_selection} → {after_selection} rows "
+                    f"(select={select_mode})"
+                )                
+            else:
+                self.logger.info(f"Row selector '{selector_name}': selected {final_count} rows")
+                            
+            all_selected_rows.append(selected_df)
         
         if not all_selected_rows:
             self.logger.warning("No rows matched any selector")
@@ -795,10 +875,9 @@ class EntityMapper:
         # Combine all selected rows (union)
         result_df = pd.concat(all_selected_rows, ignore_index=True).drop_duplicates()
         self.logger.info(f"Total rows after row selection: {len(result_df)} (from {len(df)} input rows)")
-        
+                
         # Filter to eligible participants if provided
         if eligible_participant_ids is not None:
-            participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
             if participant_id_field in result_df.columns:
                 before_count = len(result_df)
                 result_df = result_df[result_df[participant_id_field].isin(eligible_participant_ids)].copy()
@@ -1142,6 +1221,76 @@ class EntityMapper:
                 df[field] = df[field].fillna(df[f"{field}_baseline"])
                 # Drop the _baseline column
                 df = df.drop(columns=[f"{field}_baseline"])
+        
+        return df
+    
+    def _merge_fields_from_source(
+        self,
+        df: pd.DataFrame,
+        source_df: pd.DataFrame,
+        participant_id_field: str,
+        fields_to_merge: list,
+        merge_name: str = "enrichment",
+        select_mode: str = "first"
+    ) -> pd.DataFrame:
+        """
+        Merge specified fields from source rows into main DataFrame.
+        
+        Generic enrichment method that merges fields from filtered source rows
+        (e.g., death records, baseline, specific events) into the main dataset.
+        
+        Args:
+            df: Main DataFrame
+            source_df: Filtered source DataFrame with rows to merge from
+            participant_id_field: Field name for participant ID
+            fields_to_merge: List of field names to merge
+            merge_name: Name for logging purposes
+            select_mode: How to select from multiple source rows per participant ('first', 'last')
+            
+        Returns:
+            DataFrame with fields merged in
+        """
+        if participant_id_field not in source_df.columns:
+            self.logger.warning(f"Merge '{merge_name}': participant_id_field '{participant_id_field}' not in source")
+            return df
+        
+        # Select only needed fields from source
+        merge_fields = [participant_id_field] + fields_to_merge
+        existing_fields = [f for f in merge_fields if f in source_df.columns]
+        missing_fields = [f for f in fields_to_merge if f not in source_df.columns]
+        
+        if missing_fields:
+            self.logger.warning(f"Merge '{merge_name}': fields not found in source: {missing_fields}")
+        
+        if len(existing_fields) <= 1:
+            self.logger.warning(f"Merge '{merge_name}': no fields to merge")
+            return df
+        
+        # Get unique source records (one per participant)
+        if select_mode == 'last':
+            source_subset = source_df[existing_fields].groupby(participant_id_field, as_index=False).last()
+        else:  # 'first' or default
+            source_subset = source_df[existing_fields].groupby(participant_id_field, as_index=False).first()
+        
+        self.logger.info(
+            f"Merge '{merge_name}': merging {len(existing_fields)-1} fields from "
+            f"{len(source_subset)} participant(s)"
+        )
+        
+        # Merge into main DataFrame
+        df = df.merge(
+            source_subset,
+            on=participant_id_field,
+            how='left',
+            suffixes=('', f'_{merge_name}')
+        )
+        
+        # Handle conflicts: prefer merged values if original was null
+        for field in fields_to_merge:
+            merged_col = f"{field}_{merge_name}"
+            if field in df.columns and merged_col in df.columns:
+                df[field] = df[field].fillna(df[merged_col])
+                df = df.drop(columns=[merged_col])
         
         return df
     
@@ -2038,19 +2187,6 @@ class StudyDataMapper:
             )
             
             self.logger.info(f"  Result after join: {len(result_df)} records")
-        
-        # TEMPORARY DEBUG: Print entity data after joining
-        if entity_name.lower() == 'diagnosis':
-            self.logger.info("=" * 80)
-            self.logger.info("DEBUG: DIAGNOSIS ENTITY - DATA AFTER JOINING")
-            self.logger.info("=" * 80)
-            self.logger.info(f"Shape: {result_df.shape}")
-            self.logger.info(f"Columns: {list(result_df.columns)}")
-            self.logger.info("\nFirst 10 rows:")
-            self.logger.info("\n" + result_df.head(10).to_string())
-            self.logger.info("\nData types:")
-            self.logger.info("\n" + str(result_df.dtypes))
-            self.logger.info("=" * 80)
         
         return result_df
     
