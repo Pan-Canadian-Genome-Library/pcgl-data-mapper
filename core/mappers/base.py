@@ -418,7 +418,7 @@ class EntityMapper:
             return self._empty_dataframe()
         
         self.stats['filtered_records'] = len(preprocessed_df)
-        self.logger.info(f"Records after preprocessing: {self.stats['filtered_records']}")
+        self.logger.warning(f"Records after preprocessing: {self.stats['filtered_records']}")
         
         # 2. Map fields
         mapped_df = self.map_fields(preprocessed_df, **kwargs)
@@ -557,7 +557,7 @@ class EntityMapper:
                 
                 # Filter to eligible participants only (keep all their rows for enrichment)
                 df = df[df[participant_id_field].isin(eligible_participant_ids)].copy()
-                self.logger.info(f"Filtered to {len(eligible_participant_ids)} eligible participants")
+                self.logger.warning(f"Filtered to {len(eligible_participant_ids)} eligible participants")
         else:
             # Participant ID field not found - warn but continue without participant filtering
             if filters_config.get('participant') or filters_config.get('rows'):
@@ -780,6 +780,7 @@ class EntityMapper:
             return set()
         
         initial_participants = df[participant_id_field].nunique()
+        all_participant_ids = set(df[participant_id_field].unique())
         
         # Apply filter to all rows - rows without filter fields will be naturally excluded
         filtered_df, _, _ = self._apply_filters(df, participant_filter, "participant")
@@ -788,11 +789,14 @@ class EntityMapper:
         
         excluded_participants = initial_participants - final_participants
         if excluded_participants > 0:
+            excluded_ids = sorted([str(x) for x in (all_participant_ids - eligible_participant_ids)])
             retention_rate = 100 * final_participants / initial_participants if initial_participants > 0 else 0
             self.logger.info(
                 f"Participant eligibility: {initial_participants} → {final_participants} participants "
                 f"(excluded {excluded_participants}, retention {retention_rate:.1f}%)"
             )
+            if excluded_ids:
+                self.logger.warning(f"Excluded participant IDs: {excluded_ids}")
         
         return eligible_participant_ids
     
@@ -1125,7 +1129,7 @@ class EntityMapper:
         before_count = len(df)
         after_count = len(result_df)
         if before_count != after_count:
-            self.logger.info(f"OR filter: {before_count} → {after_count} rows (matched {after_count})")
+            self.logger.warning(f"OR filter: {before_count} → {after_count} rows (matched {after_count})")
         
         return result_df
     
@@ -1572,8 +1576,11 @@ class EntityMapper:
                     removed_records = df[df[field].isna()]
                     if len(removed_records) > 0:
                         id_field = 'submitter_participant_id' if 'submitter_participant_id' in df.columns else df.columns[0]
-                        removed_ids = removed_records[id_field].tolist()
-                        self.logger.warning(f"Removed {len(removed_records)} records with null '{field}': {removed_ids}")
+                        removed_ids = sorted([str(x) for x in removed_records[id_field].unique()])
+                        self.logger.warning(
+                            f"Removed {len(removed_records)} records with null '{field}' "
+                            f"(affected participant IDs: {removed_ids})"
+                        )
                     
                     df = df[df[field].notna()].copy()
             
@@ -1639,7 +1646,7 @@ class EntityMapper:
                             self.logger.debug(f"Cleaned numeric field in output: {field}")
                     
                     if fields_to_clean:
-                        self.logger.info(f"Post-processing: Cleaned {len(fields_to_clean)} numeric fields")
+                        self.logger.warning(f"Post-processing: Cleaned {len(fields_to_clean)} numeric fields")
                 
                 elif step_type == 'convert_nullable_int':
                     columns = step.get('columns', 'auto')

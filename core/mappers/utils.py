@@ -348,7 +348,7 @@ def calculate_age_in_days(
             age_days = (event_dt - birth_dt).days
             
             # Apply offset if provided
-            if event_offset_days is not None:
+            if pd.notna(event_offset_days):
                 try:
                     offset = int(float(event_offset_days))
                     age_days += offset
@@ -460,24 +460,35 @@ def generate_record_id(
     """
     Generate unique record ID in standardized format.
     
-    Format: {record_prefix}_{record_type}_{record_suffix} or {record_prefix}_{record_type}
+    Format: 
+    - With prefix: {record_prefix}_{record_type}_{record_suffix} or {record_prefix}_{record_type}
+    - Without prefix: {record_type}_{record_suffix} or {record_type}
     
     Args:
-        record_prefix: Prefix for the record ID (typically participant ID)
-        record_type: Type of record (e.g., 'comorbidity', 'phenotype', 'treatment', 'measurement')
+        record_prefix: Optional prefix for the record ID (typically participant ID). Can be None.
+        record_type: Type of record (e.g., 'comorbidity', 'phenotype', 'treatment', 'member')
         record_suffix: Optional suffix built from field values or literal strings
         
     Returns:
-        Unique record ID (e.g., "P001_treatment_cort" or "P001_comorbidity"), or None if record_prefix is missing
+        Unique record ID (e.g., "P001_treatment_cort", "P001_comorbidity", "member_0", "member"), 
+        or None if record_type is missing
     """
-    if pd.isna(record_prefix):
+    # Return None if no record type specified
+    if not record_type or pd.isna(record_type):
         return None
     
-    # Build ID with or without suffix
-    if record_suffix:
+    # Build ID based on available components
+    has_prefix = record_prefix is not None and not pd.isna(record_prefix)
+    has_suffix = record_suffix is not None and record_suffix != ""
+    
+    if has_prefix and has_suffix:
         return f"{record_prefix}_{record_type}_{record_suffix}"
-    else:
+    elif has_prefix:
         return f"{record_prefix}_{record_type}"
+    elif has_suffix:
+        return f"{record_type}_{record_suffix}"
+    else:
+        return f"{record_type}"
 
 
 # ============================================================================
