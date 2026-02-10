@@ -1,0 +1,350 @@
+# HostSeq Study - Exposure Entity Mapping Configuration
+#
+# Target Entity: Exposure (PCGL Base + Extension Schema)
+# Source: HostSeq REDCap export (main records only, baseline)
+# Pattern: Expansion - Wide-to-long conversion (checkboxes → multiple records)
+#
+# See YAML_CONFIGURATION_GUIDE.md for detailed documentation on expansion configuration.
+
+entity:
+  name: Exposure
+  source_files:
+    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+
+  fields:
+    base:
+      - submitter_participant_id
+      - exposure_code
+      - exposure_term
+      - exposure_status
+      - age_at_exposure
+      - exposure_duration
+      - exposure_amount
+      - exposure_unit
+    extension:
+      - exposure_source_text
+      - exposure_note
+  pattern: expansion
+  params:
+    participant_id_field: id_hostseq
+    selection_type: radio
+    skip_values: []  # Don't skip any values - create records for all (0, 1, -1)
+
+# Optional preprocessing steps before mapping
+preprocessing:
+  - type: construct_date
+    target: birth_date
+    params:
+      year_field: dob_year
+      month_field: dob_month
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: "id_hostseq"
+  
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+  
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+  
+  enrich:
+
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Exposure Record Expansion
+  # Converts exposure checkboxes into N records per participant
+  # ---------------------------------------------------------------------------
+  - source_field: id_hostseq
+    target_field: submitter_participant_id
+    source_label: "HostSeq study ID"
+
+  - target_field: age_at_exposure
+    target_type: age
+    source_label: null
+    params:
+      birth_date_field: birth_date
+      event_date_field: null  # Most exposures don't have specific dates
+      age_fallback_field: null
+
+
+# Each radio maps to specific ontology code and term
+configs:
+  # =====================================================================
+  # Substance Use Exposures
+  # =====================================================================
+  - source_field: smoke_100
+    code: "snomedct:365981007"
+    term: "Finding of tobacco smoking behavior (finding)"
+    source_label: "Has patient smoked at least 100 (tobacco) cigarettes in their entire life? (There are 20 cigarettes in a pack.)"
+    enrichments:
+      - target_field: [exposure_status, exposure_note]
+        source_type: radio
+        value_mappings:
+          0: ["Never", "Haven't smoked 100 cigarettes in a lifetime"]
+          1: ["Former", "Smoked 100 cigarettes but currently not smoking"]
+          2: ["Current", "Smoked 100 cigarettes and currently smoking"]
+          -1: ["Missing - Unknown", "Don't know"]
+      - target_field: exposure_amount
+        source_field: smoke_habit
+        target_type: integer
+      - target_field: exposure_unit
+        default_value: "cigarettes per day"
+      - target_field: exposure_note
+        target_type: note
+        source_field: [smoke_quit_years, tobacco_other]
+  
+  - source_field: vaping
+    code: "snomedct:722499006"
+    term: "Electronic cigarette user"
+    source_label: "Vaping"
+    enrichments:
+      - target_field: exposure_status
+        source_type: radio
+        value_mappings:
+          0: "Never"
+          1: "Current"
+          -1: "Missing - Unknown"
+      - target_field: exposure_amount
+        source_field: vaping_amount
+        target_type: integer
+      - target_field: exposure_unit
+        default_value: "cartridges per week"
+      - target_field: exposure_note
+        target_type: note
+        source_field: [vaping_amount_other]
+  
+  - source_field: cannabis
+    code: "snomedct:398705004"
+    term: "Cannabis"
+    source_label: "Cannabis"
+    enrichments:
+      - target_field: exposure_status
+        source_type: radio
+        value_mappings:
+          0: "Never"
+          1: "Current"
+          -1: "Missing - Unknown"
+      - target_field: exposure_amount
+        source_field: cannabis_amount
+        target_type: integer
+      - target_field: exposure_unit
+        default_value: "joints/bong per week"
+      - target_field: exposure_note
+        target_type: note
+        source_field: [cannabis_amount_other]
+  
+  # =====================================================================
+  # COVID-19 Vaccine - Overall Vaccination Status
+  # =====================================================================
+  - source_field: covid19_vaccine
+    code: "snomedct:28531000087107"
+    term: "COVID-19 vaccine"
+    source_label: "COVID-19 Vaccination"
+    enrichments:
+      - target_field: exposure_status
+        source_type: radio
+        value_mappings:
+          0: "Never"
+          1: "Current"
+          2: "Current"
+          3: "Current"
+          4: "Current"
+          -1: "Missing - Unknown"
+      - target_field: exposure_amount
+        source_field: covid19_vaccine
+        target_type: integer
+        value_mappings:
+          0: 0
+          1: 1
+          2: 2
+          3: 3
+          4: 4
+          -1: null
+      - target_field: exposure_unit
+        default_value: "dose"
+  
+  # =====================================================================
+  # COVID-19 Vaccine - Individual Dose Records with Specific Types
+  # =====================================================================
+  - source_field: covid19_vaccine_1_name
+    code: "snomedct:28531000087107"
+    term: "COVID-19 vaccine"
+    source_label: "COVID-19 Vaccine Dose 1"
+    enrichments:
+      - target_field: [exposure_status, exposure_source_text]
+        source_type: radio
+        value_mappings:
+          0: ["Current", "Pfizer", ]
+          1: ["Current", "Moderna"]
+          2: ["Current", "AstraZeneca"]
+          3: ["Current", "Johnson & Johnson"]
+          4: ["Current", "Other"]
+          -1: ["Missing - Unknown", "Don't know"]
+      - target_field: age_at_exposure
+        target_type: age
+        params:
+          birth_date_field: birth_date
+          event_date_field: covid19_vaccine_1_date
+          age_fallback_field: null
+      - target_field: exposure_amount
+        target_type: integer
+        default_value: 1
+      - target_field: exposure_unit
+        default_value: "dose"
+      - target_field: exposure_note
+        target_type: note
+        source_field: [covid19_vaccine_1_desc]
+  
+  - source_field: covid19_vaccine_2_name
+    code: "snomedct:28531000087107"
+    term: "COVID-19 vaccine"
+    source_label: "COVID-19 Vaccine Dose 2"
+    enrichments:
+      - target_field: [exposure_status, exposure_source_text]
+        source_type: radio
+        value_mappings:
+          0: ["Current", "Pfizer"]
+          1: ["Current", "Moderna"]
+          2: ["Current", "AstraZeneca"]
+          3: ["Current", "Johnson & Johnson"]
+          4: ["Current", "Other"]
+          -1: ["Missing - Unknown", "Don't know"]
+      - target_field: age_at_exposure
+        target_type: age
+        params:
+          birth_date_field: birth_date
+          event_date_field: covid19_vaccine_2_date
+          age_fallback_field: null
+      - target_field: exposure_amount
+        target_type: integer
+        default_value: 1
+      - target_field: exposure_unit
+        default_value: "dose"
+      - target_field: exposure_note
+        target_type: note
+        source_field: [covid19_vaccine_2_desc]
+  
+  - source_field: covid19_vaccine_3_name
+    code: "snomedct:28531000087107"
+    term: "COVID-19 vaccine"
+    source_label: "COVID-19 Vaccine Dose 3"
+    enrichments:
+      - target_field: [exposure_status, exposure_source_text]
+        source_type: radio
+        value_mappings:
+          0: ["Current", "Pfizer"]
+          1: ["Current", "Moderna"]
+          2: ["Current", "AstraZeneca"]
+          3: ["Current", "Johnson & Johnson"]
+          4: ["Current", "Other"]
+          -1: ["Missing - Unknown", "Don't know"]
+      - target_field: age_at_exposure
+        target_type: age
+        params:
+          birth_date_field: birth_date
+          event_date_field: covid19_vaccine_3_date
+          age_fallback_field: null
+      - target_field: exposure_amount
+        target_type: integer
+        default_value: 1
+      - target_field: exposure_unit
+        default_value: "dose"
+      - target_field: exposure_note
+        target_type: note
+        source_field: [covid19_vaccine_3_desc]
+  
+  - source_field: covid19_vaccine_4_name
+    code: "snomedct:28531000087107"
+    term: "COVID-19 vaccine"
+    source_label: "COVID-19 Vaccine Dose 4"
+    enrichments:
+      - target_field: [exposure_status, exposure_source_text]
+        source_type: radio
+        value_mappings:
+          0: ["Current", "Pfizer"]
+          1: ["Current", "Moderna"]
+          2: ["Current", "AstraZeneca"]
+          3: ["Current", "Johnson & Johnson"]
+          4: ["Current", "Other"]
+          -1: ["Missing - Unknown", "Don't know"]
+      - target_field: age_at_exposure
+        target_type: age
+        params:
+          birth_date_field: birth_date
+          event_date_field: covid19_vaccine_4_date
+          age_fallback_field: null
+      - target_field: exposure_amount
+        target_type: integer
+        default_value: 1
+      - target_field: exposure_unit
+        default_value: "dose"
+      - target_field: exposure_note
+        target_type: note
+        source_field: [covid19_vaccine_4_desc]
+  
+  # =====================================================================
+  # BCG Vaccine
+  # =====================================================================
+  - source_field: bcg
+    code: "snomedct:151071000119107"
+    term: "Bacillus Calmette-Guerin vaccination given"
+    source_label: "BCG Vaccine"
+    enrichments:
+      - target_field: exposure_status
+        source_type: radio
+        value_mappings:
+          0: "Never"
+          1: "Current"
+          -1: "Missing - Unknown"
+      - target_field: exposure_amount
+        target_type: integer
+        default_value: 1
+      - target_field: exposure_unit
+        default_value: "dose"
+
+
+
+# =============================================================================
+# VALIDATION RULES
+# =============================================================================
+validations:
+  # Participant ID is required
+  - type: required
+    field: submitter_participant_id
+
+# =============================================================================
+# POST-PROCESSING STEPS
+# =============================================================================
+post_processing:
+  # Convert age and amount fields to nullable integer
+  - type: convert_nullable_int
+    columns: [age_at_exposure, exposure_amount, exposure_duration]
+
+  - type: filter_records
+    field: exposure_code
+    operator: regex_match_any
+    value: 
+      - '^snomedct:(\w+)?\d+$'
+      - '^ExO:\d{7}$'
+      - '^LOINC:[0-9]{1,5}-[0-9]$'

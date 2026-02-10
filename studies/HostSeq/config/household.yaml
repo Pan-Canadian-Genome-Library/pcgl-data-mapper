@@ -1,0 +1,135 @@
+# HostSeq Study - Household Entity Mapping Configuration
+#
+# Target Entity: Household (PCGL Extension Schema)
+# Source: HostSeq REDCap export (main records only)
+# Pattern: Expansion - Household members 1-16 (wide-to-long)
+#
+# See YAML_CONFIGURATION_GUIDE.md for detailed documentation on expansion configuration.
+
+entity:
+  name: Household
+  source_files:
+    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+
+  fields:
+    extension:
+      - submitter_participant_id
+      - submitter_diagnosis_id
+      - submitter_member_id
+      - member_age_years
+      - member_relationship
+      - member_disease_status
+  pattern: expansion
+  params:
+    participant_id_field: id_hostseq
+    skip_values: [null, "", 0]  # Skip if relation field is empty/null/0
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: "id_hostseq"
+
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+
+  enrich:
+
+# =============================================================================
+# FIELD MAPPINGS (Applied to each member record)
+# =============================================================================
+mappings:
+  # ---------------------------------------------------------------------------
+  # Participant Identifier
+  # Links to Participant entity
+  # ---------------------------------------------------------------------------
+  - source_field: id_hostseq
+    target_field: submitter_participant_id
+    source_label: "HostSeq study ID"
+  
+  # ---------------------------------------------------------------------------
+  # Diagnosis Identifier
+  # Links to Diagnosis entity
+  # ---------------------------------------------------------------------------
+  - target_field: submitter_diagnosis_id
+    source_label: null
+    target_type: identifier
+    params:
+      prefix_field: id_hostseq
+      type: diagnosis
+      suffix_fields: null
+  
+
+# =============================================================================
+# EXPANSION CONFIGS (One per household member slot)
+# =============================================================================
+configs:
+  - type: range
+    start: 0
+    end: 15
+    template:
+      source_field: "household_relation_{n}"
+      enrichments:
+        - target_field: submitter_member_id
+          source_field: null
+          target_type: identifier
+          params:
+            prefix_field: null
+            type: member
+            suffix_fields: ["literal:{n}"]
+        - target_field: member_age_years
+          source_field: "household_age_{n}"
+        - target_field: member_relationship
+          source_field: "household_relation_{n}"
+          value_mappings:
+            1: "Spouse"
+            2: "Child"
+            3: "Parent"
+            4: "Grandparent"
+            5: "Aunt/uncle"
+            6: "Cousin"
+            7: "Other"
+        - target_field: member_disease_status
+          source_field: "household_covid_{n}"
+          value_mappings:
+            0: "Absent"
+            1: "Present"
+            -1: "Missing - Unknown"
+
+
+# =============================================================================
+# VALIDATION RULES
+# =============================================================================
+validations:
+  # Participant ID is required
+  - type: required
+    field: submitter_participant_id
+
+# =============================================================================
+# POST-PROCESSING STEPS
+# =============================================================================
+post_processing:
+  # Convert age fields to nullable integer
+  - type: convert_nullable_int
+    columns: [member_age_years]
+

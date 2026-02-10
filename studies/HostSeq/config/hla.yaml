@@ -1,0 +1,152 @@
+# HostSeq Study - HLA Entity Mapping Configuration
+#
+# Target Entity: HLA (PCGL Extension Schema)
+# Source: HostSeq REDCap export (main records only)
+# Pattern: Direct mapping (one HLA record per sample)
+#
+# See YAML_CONFIGURATION_GUIDE.md for detailed documentation.
+
+entity:
+  name: HLA
+  source_files:
+    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+
+  fields:
+    extension:
+      - submitter_sample_id
+      - hla_optitype_a1
+      - hla_optitype_a2
+      - hla_optitype_b1
+      - hla_optitype_b2
+      - hla_optitype_c1
+      - hla_optitype_c2
+      - hla_optitype_reads
+      - hla_optitype_objective
+  pattern: direct
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Sample Identifier
+  # Links to Sample entity using dna_number
+  # Pattern: {participant_id}_sample_{dna_number}
+  # ---------------------------------------------------------------------------
+  - target_field: submitter_sample_id
+    source_field: dna_number
+    source_label: 'DNA number (lab use only)'
+
+  
+  # ---------------------------------------------------------------------------
+  # HLA-A Allele 1
+  # First HLA-A allele
+  # ---------------------------------------------------------------------------
+  - source_field: hla_optitype_a1
+    target_field: hla_optitype_a1
+    source_label: "HLA Optitype A1"
+  
+  # ---------------------------------------------------------------------------
+  # HLA-A Allele 2
+  # Second HLA-A allele
+  # ---------------------------------------------------------------------------
+  - source_field: hla_optitype_a2
+    target_field: hla_optitype_a2
+    source_label: "HLA Optitype A2"
+  
+  # ---------------------------------------------------------------------------
+  # HLA-B Allele 1
+  # First HLA-B allele
+  # ---------------------------------------------------------------------------
+  - source_field: hla_optitype_b1
+    target_field: hla_optitype_b1
+    source_label: "HLA Optitype B1"
+  
+  # ---------------------------------------------------------------------------
+  # HLA-B Allele 2
+  # Second HLA-B allele
+  # ---------------------------------------------------------------------------
+  - source_field: hla_optitype_b2
+    target_field: hla_optitype_b2
+    source_label: "HLA Optitype B2"
+  
+  # ---------------------------------------------------------------------------
+  # HLA-C Allele 1
+  # First HLA-C allele
+  # ---------------------------------------------------------------------------
+  - source_field: hla_optitype_c1
+    target_field: hla_optitype_c1
+    source_label: "HLA Optitype C1"
+  
+  # ---------------------------------------------------------------------------
+  # HLA-C Allele 2
+  # Second HLA-C allele
+  # ---------------------------------------------------------------------------
+  - source_field: hla_optitype_c2
+    target_field: hla_optitype_c2
+    source_label: "HLA Optitype C2"
+  
+  # ---------------------------------------------------------------------------
+  # HLA Typing Reads
+  # Number of reads used for HLA typing
+  # ---------------------------------------------------------------------------
+  - source_field: hla_optitype_reads
+    target_field: hla_optitype_reads
+    source_label: "HLA Optitype Reads"
+  
+  # ---------------------------------------------------------------------------
+  # HLA Typing Objective
+  # Objective function value from HLA typing
+  # ---------------------------------------------------------------------------
+  - source_field: hla_optitype_obj
+    target_field: hla_optitype_objective
+    source_label: "HLA Optitype Objective"
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: "id_hostseq"
+  
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+        - field: hla
+          op: equals
+          value: 1
+        - field: dna_number
+          op: is_not_null
+
+  enrich:
+
+# =============================================================================
+# VALIDATION RULES
+# =============================================================================
+validations:
+  # Sample ID is required
+  - type: required
+    field: submitter_sample_id
+
+# =============================================================================
+# POST-PROCESSING STEPS
+# =============================================================================
+post_processing: 
+  - type: convert_nullable_int
+    columns: [hla_optitype_reads, hla_optitype_objective]
+

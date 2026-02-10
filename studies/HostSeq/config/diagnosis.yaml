@@ -1,0 +1,500 @@
+# HostSeq Study - Diagnosis Entity Mapping Configuration
+#
+# This configuration maps HostSeq diagnosis data to the PCGL Diagnosis entity.
+# All HostSeq participants have COVID-19 diagnosis (laboratory confirmed).
+#
+# Target Entity: Diagnosis (PCGL Base + Extension Schema)
+# Source: HostSeq REDCap export (main records only)
+# Mapper: ConfigurableEntityMapper
+
+entity:
+  name: Diagnosis
+  source_files:
+    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+
+  fields:
+    base:
+      - submitter_participant_id
+      - submitter_diagnosis_id
+      - age_at_diagnosis
+      - disease_code
+      - disease_term
+
+    extension:
+      - disease_source_text
+      - diagnosis_note
+      - diagnosis_date
+      - er_visit
+      - triage_date
+      - transfer_facility
+      - transfer_facility_name
+      - transfer_facility_date
+      - transfer_facility_sourceid
+      - transfer_facility_hostseqid
+      - hospitalized
+      - ambulatory_state
+      - date_admission
+      - hospitalized_state
+      - vent_days
+      - who_covid19_severity
+      - covid19_test_date
+      - negative_test_date
+      - pcr
+      - est_infection_time
+      - serology_result
+      - serology_date
+      - serology_kit
+      - hgi_a2
+      - hgi_b1
+      - hgi_c2
+      - hhgi_a1
+      - repeat_hosp
+      - repeat_hosp_date
+      - repeat_hosp_reason  
+
+# Optional preprocessing steps before mapping
+preprocessing:
+  - type: construct_date
+    target: birth_date
+    params:
+      year_field: dob_year
+      month_field: dob_month
+
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: "id_hostseq"
+  
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+  
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+  
+  enrich:
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Participant Identifier
+  # Links to Participant entity
+  # ---------------------------------------------------------------------------
+  - source_field: id_hostseq
+    target_field: submitter_participant_id
+    source_label: "HostSeq study ID"
+  
+  # ---------------------------------------------------------------------------
+  # Diagnosis Identifier
+  # Format: {participant_id}_diagnosis_{seq}
+  # Uses generic generate_record_id function
+  # ---------------------------------------------------------------------------
+  - target_field: submitter_diagnosis_id
+    source_label: null
+    target_type: identifier
+    params:
+      prefix_field: id_hostseq
+      type: diagnosis
+      suffix_fields: null
+  
+  # ---------------------------------------------------------------------------
+  # Disease Code
+  # MONDO:0100096 for confirmed COVID-19 (test=1)
+  # icd10:Z20.822 for suspected COVID-19 (test=0 or 2)
+  # Uses custom transform to determine based on test result
+  # ---------------------------------------------------------------------------
+  - source_field: covid19_test
+    target_field: [disease_code, disease_term, disease_source_text]
+    source_label: "Laboratory confirmed COVID-19 test result"
+    source_type: radio
+    value_mappings:
+      0: ["icd10:Z20.822", "Contact with and (suspected) exposure to COVID-19", "COVID-19 test result: Negative"]
+      1: ["MONDO:0100096", "COVID-19", "COVID-19 test result: Positive"]
+      2: ["icd10:Z20.822", "Contact with and (suspected) exposure to COVID-19", "COVID-19 test result: Was not tested"]
+    
+  # ---------------------------------------------------------------------------
+  # Age at Diagnosis
+  # Calculated from birth date and COVID-19 diagnosis date (first positive test)
+  # ---------------------------------------------------------------------------
+  - source_field: covid19_diagnosis_date
+    target_field: age_at_diagnosis
+    source_label: "COVID-19 diagnosis"
+    target_type: age
+    params:
+      birth_date_field: birth_date
+      event_date_field: covid19_diagnosis_date
+      age_fallback_field: age
+
+  # =============================================================================
+  # FIELD MAPPINGS - EXTENSION SCHEMA (Study-Specific)
+  # =============================================================================
+
+  # ---------------------------------------------------------------------------
+  # Diagnosis Note
+  # Captures suspected case details from covid19_suspected checkboxes
+  # Only populated for suspected cases (test result 0 or 2)
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: diagnosis_note
+    source_label: "If negative or not tested, is the participant suspectedb to be COVID-19 positive?"
+    source_type: checkbox
+    value_mappings:
+      covid19_suspected___1: "Yes, participant has clinical signs of COVID-19"
+      covid19_suspected___2: "Yes, participant was exposed to a confirmed household member"
+      covid19_suspected___3: "Yes, participant was exposed at work"
+      covid19_suspected___4: "Yes, participant was exposed during travels in an affected area"
+      covid19_suspected___5: "Yes, participant demonstrated no COVID-19 related symptoms but was highly exposed"
+      covid19_suspected___6: "Unknown"
+   
+  # ---------------------------------------------------------------------------
+  # Diagnosis Date
+  # Date of first positive COVID-19 test
+  # ---------------------------------------------------------------------------
+  - source_field: covid19_diagnosis_date
+    target_field: diagnosis_date
+    source_label: "COVID-19 diagnosis"
+    target_type: date
+  
+  # ---------------------------------------------------------------------------
+  # ER Visit
+  # Whether patient was seen in emergency room
+  # ---------------------------------------------------------------------------
+  - source_field: er_visit
+    target_field: er_visit
+    source_label: "Patient seen in ER"
+    source_type: radio
+    value_mappings:
+      0: "No"
+      1: "Yes"
+  
+  # ---------------------------------------------------------------------------
+  # Triage Date
+  # Date of ER triage at reporting facility
+  # ---------------------------------------------------------------------------
+  - source_field: triage_date
+    target_field: triage_date
+    source_label: "ER triage date at reporting facility"
+    target_type: date
+  
+  # ---------------------------------------------------------------------------
+  # Transfer from Facility
+  # Whether patient was transferred from another facility
+  # ---------------------------------------------------------------------------
+  - source_field: transfer_facility
+    target_field: transfer_facility
+    source_label: "Transfer from another facility"
+    source_type: radio
+    value_mappings:
+      0: "No"
+      1: "Yes - facility is a study site"
+      2: "Yes - facility is not a study site"
+  
+  # ---------------------------------------------------------------------------
+  # Transfer Facility Name
+  # Name of the facility patient was transferred from
+  # ---------------------------------------------------------------------------
+  - source_field: transfer_facility_name
+    target_field: transfer_facility_name
+    source_label: "Name of transfer facility"
+  
+  # ---------------------------------------------------------------------------
+  # Transfer Facility Date
+  # ER triage date at transfer facility
+  # ---------------------------------------------------------------------------
+  - source_field: transfer_facility_date
+    target_field: transfer_facility_date
+    source_label: "ER triage date at transfer facility"
+    target_type: date
+  
+  # ---------------------------------------------------------------------------
+  # Transfer Facility Source ID
+  # Patient ID from transfer facility
+  # ---------------------------------------------------------------------------
+  - source_field: transfer_facility_sourceid
+    target_field: transfer_facility_sourceid
+    source_label: "Source study ID # from transfer facility"
+  
+  # ---------------------------------------------------------------------------
+  # Transfer Facility HostSeq ID
+  # HostSeq study ID from transfer facility (if enrolled there)
+  # ---------------------------------------------------------------------------
+  - source_field: transfer_facility_hostseqid
+    target_field: transfer_facility_hostseqid
+    source_label: "HostSeq study ID # from transfer facility"
+  
+  # ---------------------------------------------------------------------------
+  # Hospitalized
+  # Whether patient was hospitalized
+  # ---------------------------------------------------------------------------
+  - source_field: hospitalized
+    target_field: hospitalized
+    source_label: "Patient hospitalized"
+    source_type: radio
+    value_mappings:
+      0: "No"
+      1: "Yes"
+  
+  # ---------------------------------------------------------------------------
+  # Ambulatory State
+  # Patient's ability to perform activities
+  # ---------------------------------------------------------------------------
+  - source_field: ambulatory_state
+    target_field: ambulatory_state
+    source_label: "Ambulatory state"
+    source_type: radio
+    value_mappings:
+      0: "No limitation of activities"
+      1: "Limitation of activities"
+      -1: "Unknown"
+  
+  # ---------------------------------------------------------------------------
+  # Date of Admission
+  # Hospital admission date
+  # ---------------------------------------------------------------------------
+  - source_field: date_admission
+    target_field: date_admission
+    source_label: "Date of admission"
+    target_type: date
+  
+  # ---------------------------------------------------------------------------
+  # Hospitalized State
+  # Level of respiratory support during hospitalization
+  # ---------------------------------------------------------------------------
+  - source_field: hospitalized_state
+    target_field: hospitalized_state
+    source_label: "Hospitalized state"
+    source_type: radio
+    value_mappings:
+      0: "No oxygen therapy"
+      1: "Oxygen by mask or nasal prongs"
+      2: "Non-invasive ventilation or high-flow oxygen"
+      3: "Intubation and mechanical ventilation"
+      4: "Ventilation + additional organ support -pressor, RRT, ECMO"
+  
+  # ---------------------------------------------------------------------------
+  # Ventilation Days
+  # Total duration of invasive ventilation
+  # ---------------------------------------------------------------------------
+  - source_field: vent_days
+    target_field: vent_days
+    source_label: "Total duration of invasive ventilation"
+  
+  # ---------------------------------------------------------------------------
+  # WHO COVID-19 Severity
+  # WHO classification of COVID-19 severity
+  # ---------------------------------------------------------------------------
+  - source_field: who_covid19_severity
+    target_field: who_covid19_severity
+    source_label: "WHO COVID-19 severity classification"
+    source_type: radio
+    value_mappings:
+      0: "Uninfected (no clinical or virological evidence of infection)"
+      1: "Ambulatory (no limitation of activities)"
+      2: "Ambulatory (limitation of activities)"
+      9: "Ambulatory (with or without limitation of activities)"
+      3: "Hospitalized - mild disease (hospitalized, no oxygen therapy)"
+      4: "Hospitalized - mild disease (hospitalized, oxygen by mask or nasal prongs)"
+      5: "Hospitalized - severe disease (non-invasive ventilation or high-flow oxygen)"
+      6: "Hospitalized - severe disease (intubation and mechanical ventilation)"
+      7: "Hospitalized - severe disease (ventilation and additional organ support, i.e. pressors, RRT, ECMO)"
+      8: "Dead - death"
+  
+  # ---------------------------------------------------------------------------
+  # COVID-19 Test Date
+  # Date of COVID-19 test
+  # ---------------------------------------------------------------------------
+  - source_field: covid19_test_date
+    target_field: covid19_test_date
+    source_label: "COVID-19 test date"
+    target_type: date
+  
+  # ---------------------------------------------------------------------------
+  # Negative Test Date
+  # Date of negative COVID-19 test
+  # ---------------------------------------------------------------------------
+  - source_field: negative_test_date
+    target_field: negative_test_date
+    source_label: "Negative test date"
+    target_type: date
+  
+  # ---------------------------------------------------------------------------
+  # PCR Test
+  # PCR test performed
+  # ---------------------------------------------------------------------------
+  - source_field: pcr
+    target_field: pcr
+    source_label: "PCR test"
+    source_type: radio
+    value_mappings:
+      0: "No"
+      1: "Yes"
+  
+  # ---------------------------------------------------------------------------
+  # Estimated Infection Time
+  # Estimated time of infection
+  # ---------------------------------------------------------------------------
+  - source_field: est_infection_time
+    target_field: est_infection_time
+    source_label: "Estimated infection time"
+    target_type: date
+  
+  # ---------------------------------------------------------------------------
+  # Serology Test Results
+  # Consolidated field combining all serology checkbox options
+  # Uses custom transform to compile checked values into single field
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: serology_result
+    source_label: "Serology"
+    source_type: checkbox  
+    value_mappings:
+      serology___0: "Negative"
+      serology___1: "IgM Positive"
+      serology___2: "IgG Positive"
+      serology___3: "Ab Positive"
+      serology___4: "Ab Negative"
+      serology___5: "Not administered"
+      serology___6: "Equivocal"
+  
+  # ---------------------------------------------------------------------------
+  # Serology Date
+  # Date of serology test
+  # ---------------------------------------------------------------------------
+  - source_field: serology_date
+    target_field: serology_date
+    source_label: "Serology test date"
+    target_type: date
+  
+  # ---------------------------------------------------------------------------
+  # Serology Kit
+  # Type of serology test kit used
+  # ---------------------------------------------------------------------------
+  - source_field: serology_kit
+    target_field: serology_kit
+    source_label: "Serology test kit"
+  
+  # ---------------------------------------------------------------------------
+  # HGI Genetic Markers
+  # Host genetic markers (HGI - Host Genetics Initiative)
+  # ---------------------------------------------------------------------------
+  - source_field: hgi_a2
+    target_field: hgi_a2
+    source_label: "COVID-19 HGI phenotype A2"
+    source_type: radio
+    value_mappings:
+      0: "Control"
+      1: "Case"
+  
+  - source_field: hgi_b1
+    target_field: hgi_b1
+    source_label: "COVID-19 HGI phenotype B1"
+    source_type: radio
+    value_mappings:
+      0: "Control"
+      1: "Case"
+  
+  - source_field: hgi_c2
+    target_field: hgi_c2
+    source_label: "COVID-19 HGI phenotype C2"
+    source_type: radio
+    value_mappings:
+      0: "Control"
+      1: "Case"
+  
+  - source_field: hhgi_a1
+    target_field: hhgi_a1
+    source_label: "COVID-19 HGI phenotype A1"
+    source_type: radio
+    value_mappings:
+      0: "Control"
+      1: "Case"
+  
+  # ---------------------------------------------------------------------------
+  # Repeat Hospitalization
+  # Whether patient had repeat hospitalization
+  # ---------------------------------------------------------------------------
+  - source_field: repeat_hosp
+    target_field: repeat_hosp
+    source_label: "Repeat hospitalization"
+    source_type: radio
+    value_mappings:
+      0: "No"
+      1: "Yes"
+      -1: "Don't know"
+  
+  # ---------------------------------------------------------------------------
+  # Repeat Hospitalization Date
+  # Date of repeat hospitalization
+  # ---------------------------------------------------------------------------
+  - source_field: repeat_hosp_date
+    target_field: repeat_hosp_date
+    source_label: "Repeat hospitalization date"
+    target_type: date
+  
+  # ---------------------------------------------------------------------------
+  # Repeat Hospitalization Reason
+  # Reason for repeat hospitalization
+  # ---------------------------------------------------------------------------
+  - source_field: repeat_hosp_reason
+    target_field: repeat_hosp_reason
+    source_label: "Repeat hospitalization reason"
+
+
+
+# =============================================================================
+# VALIDATION RULES
+# =============================================================================
+validations:
+  # Participant ID is required
+  - type: required
+    field: submitter_participant_id
+  
+  # Diagnosis ID is required
+  - type: required
+    field: submitter_diagnosis_id
+  
+  # Disease code is required
+  - type: required
+    field: disease_code
+  
+  # Disease term is required
+  - type: required
+    field: disease_term
+  
+  # Age at diagnosis must be within reasonable range
+  - type: age_range
+    field: age_at_diagnosis
+    min_age: 0
+    max_age: 43800
+
+# =============================================================================
+# POST-PROCESSING STEPS
+# =============================================================================
+post_processing:
+  # Convert age and duration fields to nullable integer
+  - type: convert_nullable_int
+    columns: auto
+
+  - type: filter_records
+    field: disease_code
+    operator: regex_match_any
+    value: 
+      - '^icd10:[A-Z][0-9][A-Z0-9](\.[A-Z0-9]{1,4})?$'
+      - '^MONDO:\d{7}$'

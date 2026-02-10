@@ -1,0 +1,434 @@
+# HostSeq Study - Treatment Entity Mapping Configuration
+#
+# Target Entity: Treatment (parent records only - creates linkage)
+# Child Entities: Medication and Procedure (defined in separate YAML files)
+# Source: HostSeq REDCap export (main records)
+# Pattern: Expansion - Wide-to-long conversion (checkboxes → multiple treatment records)
+#
+# See YAML_CONFIGURATION_GUIDE.md for detailed documentation on expansion configuration.
+
+entity:
+  name: Treatment
+  source_files:
+    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+
+  fields:
+    base:
+      - submitter_participant_id
+      - submitter_treatment_id
+      - treatment_type
+      - submitter_diagnosis_id
+      - age_at_treatment
+      - treatment_duration
+      - treatment_intent
+      - treatment_response
+      - treatment_status
+    extension:
+      - treatment_note
+  pattern: expansion
+  params:
+    participant_id_field: id_hostseq
+    selection_type: checkbox
+    skip_values: [0,-1]
+
+
+preprocessing:
+  - type: construct_date
+    target: birth_date
+    params:
+      year_field: dob_year
+      month_field: dob_month
+
+filters:
+  participant_id_field: "id_hostseq"
+  
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+
+  enrich:
+
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Treatment Record Expansion
+  # Converts ~50 treatment checkboxes into N records per participant
+  # Each treatment record links to corresponding medication or procedure record
+  # ---------------------------------------------------------------------------
+  - source_field: id_hostseq
+    target_field: submitter_participant_id
+
+  - target_field: submitter_treatment_id
+    target_type: identifier
+    params:
+      prefix_field: id_hostseq
+      type: treatment
+      suffix_fields: [source_field_name]  # Uses checkbox field name for unique ID
+
+  - target_field: submitter_diagnosis_id
+    target_type: identifier
+    params:
+      prefix_field: id_hostseq
+      type: diagnosis
+      suffix_fields: null  # Links to COVID-19 diagnosis
+
+  - target_field: age_at_treatment
+    target_type: age
+    params:
+      birth_date_field: birth_date
+      event_date_field: null  # Most treatments don't have specific dates
+      age_fallback_field: null
+
+  - target_field: treatment_intent
+    source_field: null
+    default_value: "Missing - Not collected"
+
+  - target_field: treatment_response
+    source_field: null
+    default_value: "Missing - Not collected"
+
+  - target_field: treatment_status
+    source_field: null
+    default_value: "Missing - Not collected"
+
+# Each checkbox represents one treatment
+# Only minimal metadata here - full details in medication.yaml and procedure.yaml
+configs:
+  # =====================================================================
+  # Home Medications
+  # =====================================================================
+  - source_field: home_meds___1
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+      - target_field: submitter_diagnosis_id
+        default_value: null
+  
+  - source_field: home_meds___2
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+      - target_field: submitter_diagnosis_id
+        default_value: null
+
+  - source_field: home_meds___3
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+      - target_field: submitter_diagnosis_id
+        default_value: null
+
+  - source_field: home_meds___4
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+      - target_field: submitter_diagnosis_id
+        default_value: null
+
+  - source_field: home_meds___5
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+      - target_field: submitter_diagnosis_id
+        default_value: null
+
+  - source_field: home_meds___6
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+      - target_field: submitter_diagnosis_id
+        default_value: null
+      - target_field: treatment_note
+        target_type: note
+        source_field: home_meds_other
+
+  - source_field: home_meds___7
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+      - target_field: submitter_diagnosis_id
+        default_value: null
+        
+  # =====================================================================
+  # Procedures - ICU Admission
+  # =====================================================================
+  - source_field: icu_hd
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Procedure"
+      - target_field: age_at_treatment
+        target_type: age
+        params:
+          birth_date_field: birth_date
+          event_date_field: icu_admis
+          age_fallback_field: null
+      - target_field: treatment_duration
+        target_type: duration
+        params:
+          start_date_field: icu_admis
+          end_date_field: icu_disch
+      - target_field: treatment_note
+        default_value: "ICU or High Dependency Unit admission"
+
+  # =====================================================================
+  # Procedures - Respiratory Support 
+  # =====================================================================
+  - source_field: prone_vent
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Procedure"
+  - source_field: inhaled_no
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Procedure"
+  - source_field: trach
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Procedure"
+
+  # =====================================================================
+  # Procedures - Extracorporeal Support
+  # =====================================================================
+  - source_field: extracorp
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Procedure"
+
+  # =====================================================================
+  # Procedures - Renal Support
+  # =====================================================================
+  - source_field: dialysis
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Procedure"
+
+
+  # =====================================================================
+  # Procedures - Cardiovascular Support
+  # =====================================================================
+  - source_field: inotrop_vasopress
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Procedure"
+      - target_field: age_at_treatment
+        target_type: age
+        params:
+          birth_date_field: birth_date
+          event_date_field: inotrop_vasopress_start
+          age_fallback_field: null
+      - target_field: treatment_duration
+        target_type: duration
+        params:
+          start_date_field: inotrop_vasopress_start
+          end_date_field: inotrop_vasopress_end
+  
+  # =====================================================================
+  # Procedures - Other Intervention
+  # =====================================================================
+  - source_field: other_intervention
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Procedure"
+      - target_field: treatment_note
+        target_type: note
+        source_field: other_intervention_desc
+
+  # =====================================================================
+  # Procedures - Plasma Therapy
+  # =====================================================================
+  - source_field: plasma
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Procedure"
+      - target_field: treatment_note
+        default_value: "Plasma therapy"
+
+  # =====================================================================
+  # Medications - Antivirals
+  # =====================================================================
+  - source_field: antiviral
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+  
+  - source_field: antiviral_lopin_riton
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+    
+  - source_field: antiviral_ribavirin
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+  
+  - source_field: antiviral_interf_a
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+  
+  - source_field: antiviral_interf_b
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+
+  - source_field: antiviral_neur_inhibitor
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+  
+  - source_field: antiviral_other
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+      - target_field: treatment_note
+        target_type: note
+        source_field: antiviral_other_name
+
+  - source_field: antiviral_neur_inhibitor
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+
+
+  # =====================================================================
+  # Medications - Antibiotics
+  # =====================================================================
+  - source_field: antibiotic_azithro
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+  
+  - source_field: antibiotic_other
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+      - target_field: treatment_note
+        target_type: note
+        source_field: antibiotic_other_name
+
+  # =====================================================================
+  # Medications - Corticosteroids
+  # =====================================================================
+  - source_field: cort
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+      - target_field: treatment_note
+        source_type: radio
+        source_field: cort_iv
+        value_mappings:
+          0: "IV: No"
+          1: "IV: Yes"
+          -1: "IV: Don't know"
+      - target_field: treatment_note
+        source_type: radio
+        source_field: cort_inhal
+        value_mappings:
+          0: "Inhaled: No"
+          1: "Inhaled: Yes"
+          -1: "Inhaled: Don't know"
+      - target_field: treatment_note
+        source_type: radio
+        source_field: cort_oral
+        value_mappings:
+          0: "Oral: No"
+          1: "Oral: Yes"
+          -1: "Oral: Don't know"
+      - target_field: treatment_note
+        target_type: note
+        source_field: [cort_route, cort_type_other]
+  
+
+
+  # =====================================================================
+  # Medications - Antifungal
+  # =====================================================================
+  - source_field: antifungal
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+  
+  - source_field: chloroq
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+  # =====================================================================
+  # Medications - Anti-inflammatory
+  # =====================================================================
+  - source_field: colchicine
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+  
+
+  # =====================================================================
+  # Medications - Antimalarials
+  # =====================================================================
+  
+  - source_field: kineret
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+    
+  - source_field: hydroxychloroq
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+  
+
+  # =====================================================================
+  # Medications - Biologics and Immunomodulators
+  # =====================================================================
+  - source_field: tocil
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+  
+
+  - source_field: kineret
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+
+  - source_field: ivig
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Medication"
+
+  - source_field: othercovid_therapy
+    enrichments:
+      - target_field: treatment_type
+        default_value: "Other"
+      - target_field: treatment_note
+        target_type: note
+        source_field: othercovid_therapy_type
+        source_label: "Specify other COVID-19 therapy"
+
+
+
+validations:
+  - type: required
+    field: submitter_participant_id
+
+post_processing:
+  - type: convert_nullable_int
+    columns: auto

@@ -1,0 +1,182 @@
+# HostSeq Study - Procedure Entity Mapping Configuration
+#
+# Target Entity: Procedure (child of Treatment entity)
+# Source: HostSeq REDCap export (main records)
+# Pattern: Expansion - Wide-to-long conversion (checkboxes → multiple procedure records)
+#
+# See YAML_CONFIGURATION_GUIDE.md for detailed documentation on expansion configuration.
+
+entity:
+  name: Procedure
+  source_files:
+    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+
+  fields:
+    base:
+      - submitter_treatment_id
+      - procedure_code
+      - procedure_term
+      - procedure_body_site_code
+      - procedure_body_site_term
+    extension:
+      - procedure_source_text
+      - procedure_body_site_source_text
+      - procedure_note
+  pattern: expansion
+  params:
+    participant_id_field: id_hostseq
+    selection_type: checkbox
+    skip_values: [0, -1]
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: "id_hostseq"
+  
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+            
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+
+  enrich:
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Procedure Record Expansion
+  # Converts procedure checkboxes into N records per participant
+  # Links to parent treatment records via submitter_treatment_id
+  # ---------------------------------------------------------------------------
+  - target_field: submitter_treatment_id
+    target_type: identifier
+    params:
+      prefix_field: id_hostseq
+      type: treatment
+      suffix_fields: [source_field_name]  # Same params as treatment.yaml = matching IDs
+
+# Each checkbox maps to specific procedure codes and terms
+configs:
+        
+  # =====================================================================
+  # Respiratory Support Procedures
+  # =================================== ==================================
+  - source_field: prone_vent
+    code: "snomedct:870391004"
+    term: "Assisted ventilation in prone position"
+    source_label: "Prone ventilation"
+    enrichments:
+      - target_field: procedure_body_site_code
+        default_value: "UBERON:0002048"
+      - target_field: procedure_body_site_term
+        default_value: "lung"
+  
+  - source_field: inhaled_no
+    code: "snomedct:1255879001"
+    term: "Administration of nitric oxide"
+    source_label: "Inhaled nitric oxide"
+    enrichments:
+      - target_field: procedure_body_site_code
+        default_value: "UBERON:0002048"
+      - target_field: procedure_body_site_term
+        default_value: "lung"
+  
+  - source_field: trach
+    code: "snomedct:232685002"
+    term: "Insertion of tracheostomy tube"
+    source_label: "Tracheostomy inserted"
+    enrichments:
+      - target_field: procedure_body_site_code
+        default_value: "UBERON:0003126"
+      - target_field: procedure_body_site_term
+        default_value: "trachea"
+        
+  # =====================================================================
+  # Extracorporeal Support
+  # =====================================================================
+  - source_field: extracorp
+    code: "snomedct:232969009"
+    term: "Cardiac support using extracorporeal membrane oxygenation circuitry"
+    source_label: "Extracorporeal support"
+    enrichments:
+      - target_field: procedure_body_site_code
+        default_value: "UBERON:0000948"
+      - target_field: procedure_body_site_term
+        default_value: "heart"
+  
+  # =====================================================================
+  # Renal Support
+  # =====================================================================
+  - source_field: dialysis
+    code: "snomedct:265764009"
+    term: "Renal dialysis"
+    source_label: "Renal replacement therapy (RRT) or dialysis"
+    enrichments:
+      - target_field: procedure_body_site_code
+        default_value: "UBERON:0002113"
+      - target_field: procedure_body_site_term
+        default_value: "kidney"
+        
+  # =====================================================================
+  # Cardiovascular Support
+  # =====================================================================
+  - source_field: inotrop_vasopress
+    code: "NCIT:C191468"
+    term: "Implantation of Temporary Mechanical Circulatory Support Device"
+    source_label: "Inotropes/vasopressors"
+    enrichments:
+      - target_field: procedure_body_site_code
+        default_value: "UBERON:0001981"
+      - target_field: procedure_body_site_term
+        default_value: "blood vessel"
+
+            
+
+
+
+# =============================================================================
+# VALIDATION RULES
+# =============================================================================
+validations:
+  # Treatment ID is required (foreign key)
+  - type: required
+    field: submitter_treatment_id
+
+# =============================================================================
+# POST-PROCESSING STEPS
+# =============================================================================
+post_processing:
+  # Convert age fields to nullable integer
+  - type: convert_nullable_int
+    columns: auto
+  - type: filter_records
+    field: procedure_code
+    operator: regex_match_any
+    value: 
+      - '^snomedct:(\w+)?\d+$'
+      - '^NCIT:C\d+$'
+      - '^umls:C\d+$'
+      - '^CCI:[A-Z0-9]([0-9]{2}|[A-Z]{2}){3}(([0-9]{2}|[A-Z]{2})[A-Z0-9]?)?$'
+  - type: filter_records
+    field: procedure_body_site_code
+    operator: regex_match_any
+    value: 
+      - '^ICDO3:[C][0-9]{2}(.[0-9]{1})?$'
+      - '^UBERON:\d{7,}$'

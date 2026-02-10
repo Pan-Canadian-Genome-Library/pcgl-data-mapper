@@ -1,0 +1,623 @@
+# HostSeq Study - Comorbidity Entity Mapping Configuration
+#
+# Target Entity: Comorbidity (PCGL Base + Extension Schema)
+# Source: HostSeq REDCap export (main records only, baseline)
+# Pattern: Expansion - Wide-to-long conversion (checkboxes → multiple records)
+
+entity:
+  name: Comorbidity 
+  source_files:
+    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+
+  fields:
+    base:
+      - submitter_participant_id
+      - age_at_comorbidity_diagnosis
+      - comorbidity_code
+      - comorbidity_term
+      - comorbidity_treatment_status
+      - comorbidity_status
+    extension:
+      - comorbidity_source_text
+      - comorbidity_note
+  pattern: expansion
+  params:
+    participant_id_field: id_hostseq
+    selection_type: radio
+    skip_values: [0, -1]  # Skip No and Don't know; allow Probable (value 2)
+
+# =============================================================================
+# PREPROCESSING STEPS
+# =============================================================================
+preprocessing:
+  # Clean numeric fields that may have comma separators (e.g., "2,004" → 2004)
+  - type: clean_numeric
+    fields: [com_immunocomp_time]
+  - type: construct_date
+    target: birth_date
+    params:
+      year_field: dob_year
+      month_field: dob_month
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: id_hostseq
+  
+  # Participant eligibility criteria
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+  
+  # Row selection
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+  
+  # No baseline enrichment needed
+  enrich:
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Comorbidity Record Expansion
+  # Converts ~45 comorbidity checkboxes into N records per participant
+  # ---------------------------------------------------------------------------
+  - source_field: id_hostseq
+    target_field: submitter_participant_id
+    source_label: "HostSeq study ID"
+
+  - target_field: age_at_comorbidity_diagnosis
+    target_type: age
+    source_label: null
+    params:
+      birth_date_field: birth_date
+      event_date_field: null  # Most comorbidities don't have specific diagnosis dates
+      age_fallback_field: null
+    
+  - target_field: comorbidity_status
+    source_type: radio
+    value_mappings:
+      1: "Active"
+  
+  - target_field: comorbidity_treatment_status
+    source_field: null
+    source_label: null
+    default_value: "Missing - Not collected"
+
+
+# Each radio maps to specific ontology code and term
+configs:
+  # =====================================================================
+  # Infectious diseases & Immunocompromised status
+  # =====================================================================
+  - source_field: com_hiv
+    code: "MONDO:0005109"
+    term: "HIV infection"
+    source_label: "HIV"
+  
+  - source_field: com_immunocomp
+    code: "icd10:D84.9"
+    term: "Immunodeficiency, unspecified"
+    source_label: "Immunocompromised status"
+    # Enrichment for age at immunocompromised diagnosis
+    enrichments:
+      - target_field: age_at_comorbidity_diagnosis
+        target_type: age
+        params:
+          birth_date_field: birth_date
+          event_date_field: first_symptom_date
+          event_offset_field: com_immunocomp_time
+          age_fallback_field: null
+  
+  - source_field: com_transplant
+    code: "icd10:Z94.9"
+    term: "Transplanted organ and tissue status, unspecified"
+    source_label: "Organ transplant"
+    # Enrichment for transplant subtypes
+    enrichments:
+      - target_field: [comorbidity_code, comorbidity_term, comorbidity_source_text]
+        source_type: checkbox
+        create_records: true
+        value_mappings:
+          com_transplant_type___1: ["icd10:Z94.1", "Heart transplant status", "Heart"]
+          com_transplant_type___2: ["icd10:Z94.0", "Kidney transplant status", "Kidney"]
+          com_transplant_type___3: ["icd10:Z94.4", "Liver transplant status", "Liver"]
+          com_transplant_type___4: ["icd10:Z94.83", "Pancreas transplant status", "Pancreas"]
+          com_transplant_type___5: ["icd10:Z94.82", "Intestine transplant status", "Intestine"]
+          com_transplant_type___6: ["icd10:Z94.2", "Lung transplant status", "Lung"]
+          com_transplant_type___7: ["icd10:Z94.7", "Corneal transplant status", "Eye (Cornea)"]
+          com_transplant_type___8: ["icd10:Z94.81", "Bone marrow transplant status", "Blood/bone marrow"]
+          com_transplant_type___9: ["icd10:Z95", "Presence of cardiac and vascular implants and grafts", "Blood vessel"]
+          com_transplant_type___10: ["icd10:Z94.9", "Transplanted organ and tissue status, unspecified", "Other"]
+      - target_field: comorbidity_note
+        target_type: note
+        source_field: com_transplant_type_other
+
+  
+  # =====================================================================
+  # Autoimmune/Rheumatologic
+  # =====================================================================
+  - source_field: com_autoimm_rheum
+    code: "MONDO:0007179"
+    term: "Autoimmune disease"
+    source_label: "Autoimmune or rheumatologic disease (e.g., rheumatoid arthritis, systemic lupus erythematosus, multiple sclerosis, inflammaory bowel disease)"
+  
+  # =====================================================================
+  # Endocrine / Diabetes
+  # =====================================================================
+  - source_field: com_diabetes
+    code: "MONDO:0005015"
+    term: "Diabetes mellitus"
+    source_label: "Diabetes"
+  
+  - source_field: com_type_i_diabetes
+    code: "MONDO:0005147"
+    term: "Type 1 diabetes mellitus"
+    source_label: "Type I diabetes"
+  
+  - source_field: com_type_ii_diabetes
+    code: "MONDO:0005148"
+    term: "Type 2 diabetes mellitus"
+    source_label: "Type II diabetes"
+  
+  # =====================================================================
+  # Respiratory
+  # =====================================================================
+  - source_field: com_asthma
+    code: "MONDO:0004979"
+    term: "Asthma"
+    source_label: "Asthma"
+  
+  - source_field: com_chronic_pulm
+    code: "MONDO:0005002"
+    term: "Chronic obstructive pulmonary disease"
+    source_label: "Chronic obstructive pulmonary disease (COPD)"
+  
+  - source_field: com_cystic_fibrosis
+    code: "MONDO:0009061"
+    term: "Cystic fibrosis"
+    source_label: "Cystic Fibrosis"
+  
+  - source_field: com_sleep_apnea
+    code: "MONDO:0005296"
+    term: "Sleep apnea"
+    source_label: "Sleep Apnea"
+    enrichments:
+      - target_field: [comorbidity_treatment_status, comorbidity_note]
+        source_type: checkbox
+        create_records: false
+        append: false
+        value_mappings:
+          com_sleep_cpap: ["Under treatment", "Home CPAP (continuous positive airway pressure) device used at night"]
+      - target_field: comorbidity_note
+        target_type: note
+        source_field: com_sleep_cpap
+  
+  
+  # =====================================================================
+  # Renal
+  # =====================================================================
+  - source_field: com_chronic_kidney
+    code: "MONDO:0005300"
+    term: "Chronic kidney disease"
+    source_label: "Chronic kidney disease"
+  
+  # =====================================================================
+  # Hepatobiliary
+  # =====================================================================
+  - source_field: com_liver
+    code: "MONDO:0005154"
+    term: "Liver disorder"
+    source_label: "Liver disease"
+  
+  - source_field: com_gallbl
+    code: "MONDO:0005281"
+    term: "Gallbladder disorder"
+    source_label: "Gallbladder disease"
+  
+  - source_field: com_pancreas
+    code: "MONDO:0002356"
+    term: "Pancreatic disorder"
+    source_label: "Pancreatic disease"
+  
+  # =====================================================================
+  # Gastrointestinal
+  # =====================================================================
+  - source_field: com_gerd
+    code: "MONDO:0007186"
+    term: "Gastroesophageal reflux disease"
+    source_label: "Gastroesophageal reflux disease (GERD)"
+  
+  - source_field: com_ibs
+    code: "MONDO:0005052"
+    term: "Irritable bowel syndrome"
+    source_label: "Irritable Bowel Syndrome (IBS)"
+  
+  # =====================================================================
+  # Metabolic
+  # =====================================================================
+  - source_field: com_lipids
+    code: "icd10:E78"
+    term: "Disorders of lipoprotein metabolism and other lipidemias"
+    source_label: "Lipid disorders (hypercholesterolemia, dyslipidemia, etc.)"
+  
+  # =====================================================================
+  # Genitourinary
+  # =====================================================================
+  - source_field: com_bph
+    code: "MONDO:0010811"
+    term: "benign prostatic hyperplasia"
+    source_label: "Benign Prostatic Hyperplasia"
+    enrichments:
+      - target_field: comorbidity_status
+        source_type: radio
+        value_mappings:
+          1: "Active"
+          2: "Not applicable"  # Mark value 2 for filtering
+  
+  - source_field: com_pcos
+    code: "MONDO:0008487"
+    term: "Polycystic ovary syndrome"
+    source_label: "Polycystic ovary syndrome (PCOS)"
+    enrichments:
+      - target_field: comorbidity_status
+        source_type: radio
+        value_mappings:
+          1: "Active"
+          2: "Not applicable"  # Mark value 2 for filtering
+  
+  # =====================================================================
+  # Cardiovascular
+  # =====================================================================
+  - source_field: com_angio
+    code: "icd10:R69"
+    term: "Illness, unspecified"
+    source_label: null
+    enrichments:
+      - target_field: [comorbidity_treatment_status, comorbidity_note]
+        source_type: radio
+        value_mappings:
+          1: ["Under treatment", "Balloon angioplasty or percutanuous coronary intervention"]
+
+  
+  - source_field: com_bypass
+    code: "icd10:Z95.1"
+    term: "Presence of aortocoronary bypass graft"
+    source_label: "Coronary artery bypass"
+  
+  - source_field: com_heart_failure
+    code: "MONDO:0005009"
+    term: "congestive heart failure"
+    source_label: "Congestive heart failure"
+  
+  - source_field: com_hypertension
+    code: "MONDO:0005044"
+    term: "Hypertension"
+    source_label: "Hypertension"
+  
+  - source_field: com_mi
+    code: "MONDO:0005068"
+    term: "Myocardial infarction"
+    source_label: "Myocardial infarction"
+  
+  - source_field: com_infarction_type1
+    code: "MONDO:0005068"
+    term: "Type 1 myocardial infarction"
+    source_label: "Type 1 MI"
+  
+  - source_field: com_infarction_type2
+    code: "MONDO:0005068"
+    term: "Type 2 myocardial infarction"
+    source_label: "Type 2 MI"
+  
+  - source_field: com_vascular
+    code: "MONDO:0005294"
+    term: "Peripheral vascular disease"
+    source_label: "Peripheral vascular disease"
+  
+  - source_field: com_stroke
+    code: "MONDO:0005098"
+    term: "Stroke"
+    source_label: "Stroke"
+  
+  - source_field: com_arrythmias
+    code: "icd10:I49.9"
+    term: "Cardiac arrhythmia, unspecified"
+    source_label: "Arrythmias"
+  
+  # =====================================================================
+  # Hematologic
+  # =====================================================================
+  - source_field: com_anemia
+    code: "MONDO:0002280"
+    term: "Anemia"
+    source_label: "Anemia"
+  
+  # =====================================================================
+  # Neurological
+  # =====================================================================
+  - source_field: com_dementia
+    code: "MONDO:0001627"
+    term: "Dementia"
+    source_label: "Dementia"
+  
+  - source_field: com_neurological
+    code: "MONDO:0005071"
+    term: "Nervous system disorder"
+    source_label: "Neurological or neuropsychiatric disease"
+  
+  # =====================================================================
+  # Cancer
+  # =====================================================================
+  - source_field: com_cancer
+    code: "MONDO:0004992"
+    term: "Cancer"
+    source_label: "Is the patient currently diagnosed with cancer?"
+    enrichments:
+      - target_field: age_at_comorbidity_diagnosis
+        target_type: age
+        source_label: null
+        params:
+          birth_date_field: birth_date
+          event_date_field: null
+          age_fallback_field: com_cancer_age
+      - target_field: [comorbidity_code, comorbidity_term, comorbidity_source_text]
+        source_type: checkbox
+        create_records: true
+        value_mappings:
+          com_leukemia: ["MONDO:0005059", "Leukemia", "Leukemia"]
+          com_lymphoma: ["MONDO:0005062", "Lymphoma", "Lymphoma"]
+          com_sarcoma: ["MONDO:0005089", "Sarcoma", "Sarcoma"]
+          com_carcinoma: ["MONDO:0004993", "Carcinoma", "Carcinoma"]
+          com_myeloma: ["MONDO:0009693", "Plasma cell myeloma", "Myeloma"]
+          com_cancer_mixedtypes: ["MONDO:0004992", "Cancer", "Mixed types"]
+      - target_field: comorbidity_note
+        source_type: checkbox
+        create_records: false
+        value_mappings:
+          com_cancer_location___0: "Cancer location: Skin"
+          com_cancer_location___1: "Cancer location: Lungs"
+          com_cancer_location___2: "Cancer location: Breast"
+          com_cancer_location___3: "Cancer location: Head and neck"
+          com_cancer_location___4: "Cancer location: Digestive/Gastrointestinal"
+          com_cancer_location___5: "Cancer location: Gynecologic"
+          com_cancer_location___6: "Cancer location: Genitourinary"
+          com_cancer_location___7: "Cancer location: Eye"
+          com_cancer_location___8: "Cancer location: Musculoskeletal"
+          com_cancer_location___9: "Cancer location: Germ cell/CNS"
+          com_cancer_location___10: "Cancer location: Other"
+          com_cancer_location____1: "Cancer location: Don't know"
+      - target_field: comorbidity_treatment_status
+        source_type: checkbox
+        create_records: false
+        append: false
+        value_mappings:
+          com_cancer_treatment___0: "Under treatment"
+          com_cancer_treatment___1: "Under treatment"
+          com_cancer_treatment___2: "Under treatment"
+          com_cancer_treatment___3: "Under treatment"
+          com_cancer_treatment___4: "Under treatment"
+          com_cancer_treatment___5: "Under treatment"
+          com_cancer_treatment___6: "Under treatment"
+          com_cancer_treatment___7: "Under treatment"
+          com_cancer_treatment___8: "Untreated"
+          com_cancer_treatment____1: "Missing - Unknown"
+      - target_field: comorbidity_note
+        source_type: checkbox
+        create_records: false
+        value_mappings:
+          com_cancer_treatment___0: "Cancer treatment: Surgery"
+          com_cancer_treatment___1: "Cancer treatment: Chemotherapy"
+          com_cancer_treatment___2: "Cancer treatment: Radiation therapy"
+          com_cancer_treatment___3: "Cancer treatment: HSCT"
+          com_cancer_treatment___4: "Cancer treatment: Immunotherapy"
+          com_cancer_treatment___5: "Cancer treatment: Hormone therapy"
+          com_cancer_treatment___6: "Cancer treatment: Clinical trials"
+          com_cancer_treatment___7: "Cancer treatment: Other"
+          com_cancer_treatment___8: "Cancer treatment: None"
+          com_cancer_treatment____1: "Cancer treatment: Don't know"
+      - target_field: comorbidity_note
+        target_type: note
+        source_field: [com_cancer_treatment_other, com_cancer_location_other]
+  
+  # =====================================================================
+  # Co-infections (respiratory)
+  # =====================================================================
+  - source_field: influenza
+    code: "MONDO:0005812"
+    term: "Influenza"
+    source_label: "Influenza"
+    enrichments:
+      - target_field: [comorbidity_status, comorbidity_note]
+        source_type: radio
+        value_mappings:
+          1: ["Active", "Influenza Confirmed"]
+          2: ["Active", "Influenza Probable"]
+
+      - target_field: comorbidity_note
+        source_type: radio
+        source_field: influenza_type
+        value_mappings:
+          1: "Influenza type: A/H3N2"
+          2: "Influenza type: A/H1N1pdm09"
+          3: "Influenza type: A/H5N1"
+          4: "Influenza type: A, not typed"
+          5: "Influenza type: B"
+          6: "Influenza type: Other"
+      - target_field: comorbidity_note
+        target_type: note
+        source_field: influenza_type_other
+
+  
+  - source_field: coronavirus
+    code: "MONDO:0020753"
+    term: "Orthocoronavirinae infectious disease"
+    source_label: "Coronavirus"
+    enrichments:
+      - target_field: [comorbidity_status, comorbidity_note]
+        value_mappings:
+          1: ["Active", "Coronavirus Confirmed"]
+          2: ["Active", "Coronavirus Probable"]
+
+      - target_field: comorbidity_note
+        source_type: radio
+        source_field: coronavirus_type
+        value_mappings:
+          1: "Coronavirus type: Novel CoV"
+          2: "Coronavirus type: MERS CoV"
+          3: "Coronavirus type: Other CoV"
+      - target_field: comorbidity_note  
+        target_type: note
+        source_field: coronavirus_type_other
+
+  
+  - source_field: rsv
+    code: "MONDO:0001577"
+    term: "Respiratory syncytial virus infectious disease"
+    source_label: "RSV"
+    enrichments:
+      - target_field: [comorbidity_status, comorbidity_note]
+        source_type: radio
+        value_mappings:
+          1: ["Active", "RSV Confirmed"]
+          2: ["Active", "RSV Probable"]
+  
+  - source_field: adenovirus
+    code: "MONDO:0043479"
+    term: "adenoviridae infectious disease"
+    source_label: "Adenovirus"
+    enrichments:
+      - target_field: [comorbidity_status, comorbidity_note]
+        source_type: radio  
+        value_mappings:
+          1: ["Active", "Adenovirus Confirmed"]
+          2: ["Active", "Adenovirus Probable"]
+  
+  - source_field: enterovirus
+    code: "MONDO:0005747" 
+    term: "enterovirus infectious disease"
+    source_label: "Enterovirus"
+    enrichments:
+      - target_field: [comorbidity_status, comorbidity_note]
+        source_type: radio
+        value_mappings:
+          1: ["Active", "Enterovirus Confirmed"]
+          2: ["Active", "Enterovirus Probable"]
+  
+  - source_field: bacteria
+    code: "MONDO:0005113"
+    term: "bacterial infectious disease"
+    source_label: "Bacteria"
+    enrichments:
+      - target_field: [comorbidity_status, comorbidity_note]
+        source_type: radio
+        value_mappings:
+          1: ["Active", "Bacteria Confirmed"]
+          2: ["Active", "Bacteria Probable"]
+
+      - target_field: [comorbidity_code, comorbidity_term, comorbidity_source_text]   
+        source_type: checkbox
+        create_records: true
+        value_mappings:
+          bacteria_type___1: ["MONDO:0005114", "pneumococcal infection", "Streptococcus pneumoniae"]
+          bacteria_type___2: ["MONDO:0005545", "staphylococcus aureus infection", "Staphylococcus aureus"]
+          bacteria_type___3: ["MONDO:0011825", "streptococcus, group A, severity of infection by", "Group A streptococcus"]
+          bacteria_type___4: ["MONDO:0020920", "escherichia coli infection", "Escherichia coli"]
+          bacteria_type___5: ["MONDO:0030602", "Klebsiella pneumonia", "Klebsiella pneumoniae"]
+          bacteria_type___6: ["MONDO:0005113", "bacterial infectious disease", "Other"]
+      - target_field: comorbidity_note
+        source_type: checkbox
+        value_mappings:
+          bacteria_location___1: "Bacteria Location: Blood"
+          bacteria_location___2: "Bacteria Location: Lower respiratory tract"
+          bacteria_location___3: "Bacteria Location: Urine"
+          bacteria_location___4: "Bacteria Location: Bone or joint"
+          bacteria_location___5: "Bacteria Location: CNS"
+          bacteria_location___6: "Bacteria Location: Other"
+      - target_field: comorbidity_note
+        target_type: note
+        source_field: [bacteria_type_other, bacteria_location_other]
+
+  
+  - source_field: other_infect_respiratory
+    code: "MONDO:0024355"
+    term: "respiratory tract infectious disorder"
+    source_label: "Other respiratory infection"
+    enrichments:
+      - target_field: [comorbidity_status, comorbidity_note]
+        source_type: radio
+        value_mappings:
+          1: ["Active", "Other respiratory infection: Confirmed"]
+          2: ["Active", "Other respiratory infection: Probable"]
+
+      - target_field: comorbidity_note
+        target_type: note
+        source_field: other_infect_respiratory_type
+  
+  - source_field: pneumonia
+    code: "MONDO:0005249"
+    term: "Pneumonia"
+    source_label: "Pneumonia"
+  
+  # =====================================================================
+  # Other
+  # =====================================================================
+  - source_field: com_other
+    code: "MONDO:0000001"
+    term: "Disease"
+    source_label: "Other comorbidity"
+    enrichments:
+      - target_field: comorbidity_status
+        default_value: "Active"
+      - target_field: comorbidity_note
+        target_type: note
+        source_field: com_other
+
+
+# =============================================================================
+# VALIDATION RULES
+# =============================================================================
+validations:
+  # Participant ID is required
+  - type: required
+    field: submitter_participant_id
+  
+
+# =============================================================================
+# POST-PROCESSING STEPS
+# =============================================================================
+post_processing:
+  # Remove records marked as "Not applicable" (e.g., BPH/PCOS with value 2)
+  - type: filter_records
+    field: comorbidity_status
+    operator: not_equals
+    value: "Not applicable"
+
+  - type: filter_records
+    field: comorbidity_code
+    operator: regex_match_any
+    value: 
+      - '^icd10:[A-Z][0-9][A-Z0-9](\.[A-Z0-9]{1,4})?$'
+      - '^MONDO:\d{7}$'
+
+  # Convert age fields to nullable integer
+  - type: convert_nullable_int
+    columns: auto
+
+

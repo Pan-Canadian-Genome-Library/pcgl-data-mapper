@@ -1,0 +1,783 @@
+# HostSeq Study - Measurement Entity Mapping Configuration
+#
+# Target Entity: Measurement (PCGL Base + Extension Schema)
+# Source: HostSeq REDCap export (repeat_instrument='laboratory_results')
+# Pattern: Expansion - Wide-to-long conversion (checkboxes → multiple records)
+#
+# See YAML_CONFIGURATION_GUIDE.md for detailed documentation on expansion configuration.
+
+entity:
+  name: Measurement
+  source_files:
+    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+
+  fields:
+    base:
+      - submitter_participant_id
+      - age_at_measurement
+      - measurement_code
+      - measurement_term
+      - measurement_result_numeric
+      - measurement_unit
+      - measurement_result_categorical
+    extension:
+      - measurement_source_text
+      - measurement_unit_source_text
+      - measurement_note
+  pattern: expansion
+  params:
+    participant_id_field: id_hostseq
+    selection_type: radio
+    skip_values: [0, -1]  # Skip when test was not performed
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: "id_hostseq"
+  
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+  
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+    - name: laboratory_results
+      filter:
+        - field: redcap_repeat_instrument
+          op: equals
+          value: laboratory_results
+
+  enrich:
+    - name: baseline_demographics
+      fields: ["dob_year", "dob_month", "age"]
+      source:
+        - field: redcap_repeat_instrument
+          op: is_null
+
+
+# Optional preprocessing steps before mapping
+preprocessing:
+  - type: construct_date
+    target: birth_date
+    params:
+      year_field: dob_year
+      month_field: dob_month
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Measurement Record Expansion
+  # Converts lab test checkboxes into N records per participant
+  # ---------------------------------------------------------------------------
+  - source_field: id_hostseq
+    target_field: submitter_participant_id
+    source_label: "HostSeq study ID"
+
+  - target_field: age_at_measurement
+    target_type: age
+    source_label: null
+    params:
+      birth_date_field: birth_date
+      event_date_field: lab_date
+      age_fallback_field: null
+
+
+# Each radio maps to specific LOINC code and UO unit if applicable
+configs:
+  # =====================================================================
+  # Hematology Tests
+  # =====================================================================
+  - source_field: lab_haemoglobin
+    code: "LOINC:718-7"
+    term: "Hemoglobin [Mass/volume] in Blood"
+    source_label: "Haemoglobin"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_haemoglobin_result
+        target_type: float
+      - target_field: [measurement_unit, measurement_unit_source_text]
+        source_field: lab_haemoglobin_unit
+        value_mappings:
+          'g_dL': ["UO:0000208", "g/dL"]
+          'g_L': ["UO:0000175", "g/L"]
+  
+  - source_field: lab_wbc
+    code: "LOINC:6690-2"
+    term: "Leukocytes [#/volume] in Blood by Automated count"
+    source_label: "WBC count"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_wbc_result
+        target_type: float
+      - target_field: [measurement_unit, measurement_unit_source_text]
+        source_field: lab_wbc_unit
+        value_mappings:
+          'x109L': [null, "10^9/L"]
+          'x103L': [null, "10^3/L"]
+  - source_field: lab_lymphocyte
+    code: "LOINC:731-0"
+    term: "Lymphocytes [#/volume] in Blood by Automated count"
+    source_label: "Lymphocyte count"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_lymphocyte_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000316"
+  
+  - source_field: lab_neutrophil
+    code: "LOINC:751-8"
+    term: "Neutrophils [#/volume] in Blood by Automated count"
+    source_label: "Neutrophil count"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_neutrophil_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000316"
+  
+  - source_field: lab_haematocrit
+    code: "LOINC:4544-3"
+    term: "Hematocrit [Volume Fraction] of Blood by Automated count"
+    source_label: "Haematocrit"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_haematocrit_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000187"
+  
+  - source_field: lab_platelets
+    code: "LOINC:777-3"
+    term: "Platelets [#/volume] in Blood by Automated count"
+    source_label: "Platelets"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_platelets_result
+        target_type: float
+      - target_field: [measurement_unit, measurement_unit_source_text]
+        source_field: lab_platelets_unit
+        value_mappings:
+          'x109L': [null, "10^9/L"]
+          'x103L': [null, "10^3/L"]
+        
+  # =====================================================================
+  # Coagulation Tests
+  # =====================================================================
+  - source_field: lab_aptt
+    code: "LOINC:3173-2"
+    term: "aPTT in Blood by Coagulation assay"
+    source_label: "APTT"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_aptt_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000010"
+  
+  - source_field: lab_aptt_aptr
+    code: "LOINC:63561-5"
+    term: "aPTT actual/normal in Platelet poor plasma by Coagulation assay"
+    source_label: "APTT/APTR"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_aptt_aptr_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000190"
+  
+  - source_field: lab_pt
+    code: "LOINC:5902-2"
+    term: "Prothrombin time (PT)"
+    source_label: "PT"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_pt_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000010"
+  
+  - source_field: lab_inr
+    code: "LOINC:6301-6"
+    term: "INR in Platelet poor plasma by Coagulation assay"
+    source_label: "INR"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_inr_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000190"
+  
+  - source_field: lab_ddimer
+    code: "LOINC:48065-7"
+    term: "Fibrin D-dimer FEU [Mass/volume] in Platelet poor plasma"
+    source_label: "D-dimer"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_ddimer_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000275"
+  
+  - source_field: lab_fibrinogen
+    code: "LOINC:3255-7"
+    term: "Fibrinogen [Mass/volume] in Platelet poor plasma by Coagulation assay"
+    source_label: "Fibrinogen"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_fibrinogen_result
+        target_type: float
+      - target_field: [measurement_unit, measurement_unit_source_text]
+        source_field: lab_fibrinogen_unit
+        value_mappings:
+          'mg_dl': ["UO:0010067", "mg/dL"]
+          'g_l': ["UO:0000175", "g/L"]
+  
+  # =====================================================================
+  # Liver Function Tests
+  # =====================================================================
+  - source_field: lab_alt_sgpt
+    code: "LOINC:1742-6"
+    term: "Alanine aminotransferase [Enzymatic activity/volume] in Serum or Plasma"
+    source_label: "ALT/SGPT"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_alt_sgpt_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000179"
+  
+  - source_field: lab_ast_sgot
+    code: "LOINC:1920-8"
+    term: "Aspartate aminotransferase [Enzymatic activity/volume] in Serum or Plasma"
+    source_label: "AST/SGOT"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_ast_sgot_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000179"
+  
+  - source_field: lab_total_bilirubin
+    code: "LOINC:1975-2"
+    term: "Bilirubin.total [Mass/volume] in Serum or Plasma"
+    source_label: "Total bilirubin"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_total_bilirubin_result
+        target_type: float
+      - target_field: [measurement_unit, measurement_unit_source_text]
+        source_field: lab_total_bilirubin_unit
+        value_mappings:
+          'mg_dL': ["UO:0010067", "mg/dL"]
+          'umol_L': ["UO:0010003", "umol/L"]
+  
+  # =====================================================================
+  # Renal Function Tests
+  # =====================================================================
+  - source_field: lab_creatinine
+    code: "LOINC:2160-0"
+    term: "Creatinine [Mass/volume] in Serum or Plasma"
+    source_label: "Creatinine"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_creatinine_result
+        target_type: float
+      - target_field: [measurement_unit, measurement_unit_source_text]
+        source_field: lab_creatinine_unit
+        value_mappings:
+          'mg_dl': ["UO:0010067", "mg/dL"]
+          'umol_l': ["UO:0010003", "umol/L"]
+  
+  - source_field: lab_bun
+    code: "LOINC:3094-0"
+    term: "Urea nitrogen [Mass/volume] in Serum or Plasma"
+    source_label: "Blood urea nitrogen (urea)"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_bun_result
+        target_type: float
+      - target_field: [measurement_unit, measurement_unit_source_text]
+        source_field: lab_bun_unit
+        value_mappings:
+          'mg_dl': ["UO:0010067", "mg/dL"]
+          'mmol_l': [null, "mmol/L"]
+  
+  # =====================================================================
+  # Electrolytes
+  # =====================================================================
+  - source_field: lab_sodium
+    code: "LOINC:2951-2"
+    term: "Sodium [Moles/volume] in Serum or Plasma"
+    source_label: "Sodium"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_sodium_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: null
+      - target_field: measurement_unit_source_text
+        default_value: "mmol/L"
+  
+  - source_field: lab_potassium
+    code: "LOINC:2823-3"
+    term: "Potassium [Moles/volume] in Serum or Plasma"
+    source_label: "Potassium"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_potassium_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: null
+      - target_field: measurement_unit_source_text
+        default_value: "mmol/L"
+  
+  # =====================================================================
+  # Metabolic Tests
+  # =====================================================================
+  - source_field: lab_glucose
+    code: "LOINC:2345-7"
+    term: "Glucose [Mass/volume] in Serum or Plasma"
+    source_label: "Glucose"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_glucose_result
+        target_type: float
+      - target_field: [measurement_unit, measurement_unit_source_text]
+        source_field: lab_glucose_unit
+        value_mappings:
+          'mg_dl': ["UO:0010067", "mg/dL"]
+          'mmol_l': [null, "mmol/L"]
+  
+  - source_field: lab_lactate
+    code: "LOINC:2524-7"
+    term: "Lactate [Moles/volume] in Serum or Plasma"
+    source_label: "Lactate"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_lactate_result
+        target_type: float
+      - target_field: [measurement_unit, measurement_unit_source_text]
+        source_field: lab_lactate_unit
+        value_mappings:
+          'mmol_l': [null, "mmol/L"]
+          'mg_dl': ["UO:0010067", "mg/dL"]
+  
+  # =====================================================================
+  # Inflammatory Markers
+  # =====================================================================
+  - source_field: lab_crp
+    code: "LOINC:1988-5"
+    term: "C reactive protein [Mass/volume] in Serum or Plasma"
+    source_label: "CRP"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_crp_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0010067"
+      - target_field: measurement_unit_source_text
+        default_value: "mg/dL"
+  
+  - source_field: lab_procalcitonin
+    code: "LOINC:33959-8"
+    term: "Procalcitonin [Mass/volume] in Serum or Plasma"
+    source_label: "Procalcitonin"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_procalcitonin_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000275"
+  
+  - source_field: lab_ferritin
+    code: "LOINC:2276-4"
+    term: "Ferritin [Mass/volume] in Serum or Plasma"
+    source_label: "Ferritin"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_ferritin_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000275"
+  
+  - source_field: lab_il6
+    code: "LOINC:26881-3"
+    term: "Interleukin 6 [Mass/volume] in Serum or Plasma"
+    source_label: "IL-6"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_il6_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0010070"
+  
+  # =====================================================================
+  # Other Chemistry
+  # =====================================================================
+  - source_field: lab_ldh
+    code: "LOINC:2532-0"
+    term: "Lactate dehydrogenase [Enzymatic activity/volume] in Serum or Plasma"
+    source_label: "LDH"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_ldh_result
+        target_type: float
+      - target_field: [measurement_unit, measurement_unit_source_text]
+        source_field: lab_ldh_unit
+        value_mappings:
+          'u_l': ["UO:0000179", "U/L"]
+          'm_l': [null, "microkatals/L"]
+  
+  - source_field: lab_triglycerides
+    code: "LOINC:2571-8"
+    term: "Triglyceride [Mass/volume] in Serum or Plasma"
+    source_label: "Triglycerides"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_triglycerides_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0010067"
+  
+  # =====================================================================
+  # Immunology
+  # =====================================================================
+  - source_field: lab_cd4
+    code: "LOINC:24467-3"
+    term: "CD3+CD4+ (T4 helper) cells [#/volume] in Blood"
+    source_label: "CD4"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_cd4_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000316"
+  
+  - source_field: lab_cd8
+    code: "LOINC:14135-8"
+    term: "CD3+CD8+ (T8 suppressor) cells [#/volume] in Blood"
+    source_label: "CD8"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_cd8_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000316"
+  
+  - source_field: lab_cd4_cd8
+    code: "LOINC:54218-3"
+    term: "CD3+CD4+ (T4 helper) cells/CD3+CD8+ (T8 suppressor cells) cells [# Ratio] in Blood"
+    source_label: "CD4/CD8 ratio"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_cd4_cd8_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000190"
+  
+  # =====================================================================
+  # Cardiac Biomarkers
+  # =====================================================================
+  - source_field: lab_nt_probnp
+    code: "LOINC:33762-6"
+    term: "Natriuretic peptide.B prohormone N-Terminal [Mass/volume] in Serum or Plasma"
+    source_label: "NT_proBNP"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_nt_probnp_result
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0010070"
+  
+  - source_field: lab_bnp
+    code: "LOINC:30934-4"
+    term: "Natriuretic peptide B [Mass/volume] in Serum or Plasma"
+    source_label: "BNP"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_bnp_result
+        target_type: float
+      - target_field: [measurement_unit, measurement_unit_source_text]
+        source_field: lab_bnp_unit
+        value_mappings:
+          'pg_ml': ["UO:0010070", "pg/mL"]
+          'ng_l': ["UO:0000275", "ng/L"]
+  
+  # =====================================================================
+  # Imaging and Diagnostics
+  # =====================================================================
+  - source_field: lab_chest_ct
+    code: "LOINC:24627-2"
+    term: "CT Chest"
+    source_label: "Chest CT"
+    enrichments:
+      - target_field: measurement_result_categorical
+        source_field: lab_chest_ct
+        target_type: categorical
+        value_mappings:
+          0: "No"
+          1: "Yes"
+          2: "Don't know"
+
+  
+  - source_field: lab_chest_xray
+    code: "LOINC:24657-9"
+    term: "XR tomography Chest"
+    source_label: "Chest X-ray"
+    enrichments:
+      - target_field: measurement_result_categorical
+        target_type: categorical
+        source_field: lab_chest_xray_infiltrates
+        source_type: radio
+        create_records: false
+        value_mappings:
+          0: "Infiltrates present on chest X-ray: No"
+          1: "Infiltrates absent on chest X-ray: Yes"
+          -1: "Infiltrates on chest X-ray: Don't know"
+  
+  - source_field: lab_ecg
+    code: "LOINC:11524-6"
+    term: "EKG study"
+    source_label: "ECG"
+    enrichments:
+      - target_field: measurement_result_categorical
+        source_field: lab_ecg
+        target_type: categorical
+        value_mappings:
+          0: "No"
+          1: "Yes"
+          2: "Don't know"
+  
+  - source_field: lab_pocus
+    code: "LOINC:25061-3"
+    term: "US Unspecified body region"
+    source_label: "POCUS"
+    enrichments:
+      - target_field: measurement_result_categorical
+        source_field: lab_pocus
+        target_type: categorical
+        value_mappings:
+          0: "No"
+          1: "Yes"
+          2: "Don't know"
+  
+  - source_field: lab_echo
+    code: "LOINC:18106-5"
+    term: "Cardiac echo study Procedure"
+    source_label: "Echocardiography"
+    enrichments:
+      - target_field: measurement_result_categorical
+        source_field: lab_echo
+        target_type: categorical
+        value_mappings:
+          0: "No"
+          1: "Yes"
+          2: "Don't know"
+  
+  # =====================================================================
+  # Blood Typing
+  # =====================================================================
+  - source_field: abo_type
+    code: "LOINC:883-9"
+    term: "ABO group [Type] in Blood"
+    source_label: "ABO blood type"
+    enrichments:
+      - target_field: measurement_result_categorical
+        source_field: abo_type
+        target_type: categorical
+        value_mappings:
+          'A': 'A'
+          'B': 'B'
+          'AB': 'AB'
+          'O': 'O'
+          '-1': "Don't know"
+      - target_field: age_at_measurement
+        target_type: age
+        params:
+          birth_date_field: birth_date
+          event_date_field: date_admission
+          age_fallback_field: null
+
+  
+  - source_field: rh_factor
+    code: "LOINC:10331-7"
+    term: "Rh [Type] in Blood"
+    source_label: "Rh factor"
+    enrichments:
+      - target_field: measurement_result_categorical
+        source_field: rh_factor
+        target_type: categorical
+        value_mappings:
+          0: 'Absent'
+          1: 'Present'
+          -1: "Don't know"
+      - target_field: age_at_measurement
+        target_type: age
+        params:
+          birth_date_field: birth_date
+          event_date_field: date_admission
+          age_fallback_field: null
+  
+  # =====================================================================
+  # Vital Signs
+  # These are captured from baseline rows (repeat_instrument is null)
+  # Lab tests come from laboratory_results repeat instrument rows
+  # =====================================================================
+  - source_field: bp_sys
+    code: "LOINC:8480-6"
+    term: "Systolic blood pressure"
+    source_label: "Systolic blood pressure"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: bp_sys
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000272"
+      - target_field: age_at_measurement
+        target_type: age
+        params:
+          birth_date_field: birth_date
+          event_date_field: date_admission
+          age_fallback_field: null
+  
+  - source_field: bp_dia
+    code: "LOINC:8462-4"
+    term: "Diastolic blood pressure"
+    source_label: "Diastolic blood pressure"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: bp_dia
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000272"
+      - target_field: age_at_measurement
+        target_type: age
+        params:
+          birth_date_field: birth_date
+          event_date_field: date_admission
+          age_fallback_field: null
+  
+  - source_field: heart_rate
+    code: "LOINC:8867-4"
+    term: "Heart rate"
+    source_label: "Heart rate"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: heart_rate
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000148"
+      - target_field: age_at_measurement
+        target_type: age
+        params:
+          birth_date_field: birth_date
+          event_date_field: date_admission
+          age_fallback_field: null
+  
+  - source_field: respiratory_rate
+    code: "LOINC:9279-1"
+    term: "Respiratory rate"
+    source_label: "Respiratory rate"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: respiratory_rate
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000148"
+      - target_field: age_at_measurement
+        target_type: age
+        params:
+          birth_date_field: birth_date
+          event_date_field: date_admission
+          age_fallback_field: null
+  
+  - source_field: oxygen_sat
+    code: "LOINC:20564-1"
+    term: "Oxygen saturation in Blood"
+    source_label: "Oxygen saturation"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: oxygen_sat
+        target_type: float
+      - target_field: measurement_unit
+        default_value: "UO:0000187"
+      - target_field: age_at_measurement
+        target_type: age
+        params:
+          birth_date_field: birth_date
+          event_date_field: date_admission
+          age_fallback_field: null
+  
+  - source_field: oxygen_sat_on
+    code: "LOINC:3151-8"
+    term: "Inhaled oxygen flow rate"
+    source_label: null
+    enrichments:
+      - target_field: measurement_result_categorical
+        source_field: oxygen_sat_on
+        target_type: categorical
+        value_mappings:
+          0: "Room air"
+          1: "Oxygen therapy"
+          3: "N/A"
+      - target_field: age_at_measurement
+        target_type: age
+        params:
+          birth_date_field: birth_date
+          event_date_field: date_admission
+          age_fallback_field: null
+  
+  # =====================================================================
+  # Cardiac Markers
+  # =====================================================================
+  - source_field: lab_troponin
+    code: "LOINC:6598-7"
+    term: "Troponin T.cardiac [Mass/volume] in Serum or Plasma"
+    source_label: "Troponin"
+    enrichments:
+      - target_field: measurement_result_numeric
+        source_field: lab_troponin_result
+        target_type: float
+      - target_field: [measurement_unit, measurement_unit_source_text]
+        source_field: lab_troponin_unit
+        value_mappings:
+          'hsTnT': ["UO:0000275", "hsTnT"]
+          'hsTnI': ["UO:0000275", "hsTnI"]
+          'TnT': ["UO:0000275", "TnT"]
+          'TnI': ["UO:0000275", "TnI"]
+
+  
+
+validations:
+  - type: required
+    field: submitter_participant_id
+
+post_processing:
+  - type: convert_nullable_int
+    columns: auto
+
+  - type: filter_records
+    field: measurement_code
+    operator: regex_match_any
+    value: 
+      - '^LOINC:(\d|\w)+-\d$'
+
+  - type: clean_numeric
+    fields: [measurement_result_numeric]

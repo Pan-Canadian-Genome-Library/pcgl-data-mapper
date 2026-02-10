@@ -1,0 +1,120 @@
+# HostSeq Study - Participant Entity Mapping Configuration
+#
+# Target Entity: Participant (PCGL Base Schema)
+# Source: HostSeq REDCap export (main records only)
+# Pattern: Direct mapping (one participant per source record)
+#
+# See YAML_CONFIGURATION_GUIDE.md for detailed documentation.
+
+entity:
+  name: Participant
+  source_files:
+    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+
+  fields:
+    base:
+      - submitter_participant_id
+      - duo_permission
+      - duo_modifier
+      - disease_specific_modifier
+  pattern: direct
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: "id_hostseq"
+  
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+
+  enrich:
+
+mappings: 
+  # ---------------------------------------------------------------------------
+  # Participant Identifier
+  # Source: id_hostseq (HostSeq study ID)
+  # ---------------------------------------------------------------------------
+  - source_field: id_hostseq
+    target_field: submitter_participant_id
+    source_label: "HostSeq study ID"
+  
+  # ---------------------------------------------------------------------------
+  # Data Use Ontology - Permission
+  # Default: Health or medical or biomedical research (DUO:0000006)
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: duo_permission
+    source_label: null
+    default_value: "DUO:0000006 (health or medical or biomedical research)"
+  
+  # ---------------------------------------------------------------------------
+  # Data Use Ontology - Modifiers
+  # Default: Ethics approval, user/project/institution restrictions
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: duo_modifier
+    source_label: null
+    default_value:
+      - "DUO:0000021 (ethics approval required)"
+      - "DUO:0000026 (user specific restriction)"
+      - "DUO:0000027 (project specific restriction)"
+      - "DUO:0000028 (institution specific restriction)"
+  
+  # ---------------------------------------------------------------------------
+  # Disease Specific Modifier
+  # Optional MONDO code for disease-specific restrictions (null for HostSeq)
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: disease_specific_modifier
+    source_label: null
+    default_value: null
+
+
+
+
+# =============================================================================
+# VALIDATION RULES
+# =============================================================================
+validations:
+  # Participant ID is required
+  - type: required
+    field: submitter_participant_id
+  
+  # Participant ID must be valid format
+  - type: participant_id
+    field: submitter_participant_id
+  
+  # Participant ID must be unique
+  - type: unique
+    field: submitter_participant_id
+  
+  # DUO permission is required
+  - type: required
+    field: duo_permission
+
+# =============================================================================
+# POST-PROCESSING STEPS
+# =============================================================================
+post_processing: []
+  # No post-processing needed for Participant entity

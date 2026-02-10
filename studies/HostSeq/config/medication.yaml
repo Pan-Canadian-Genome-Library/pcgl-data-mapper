@@ -1,0 +1,258 @@
+# HostSeq Study - Medication Entity Mapping Configuration
+#
+# Target Entity: Medication (child of Treatment entity)
+# Source: HostSeq REDCap export (main records)
+# Pattern: Expansion - Wide-to-long conversion (checkboxes → multiple medication records)
+#
+# See YAML_CONFIGURATION_GUIDE.md for detailed documentation on expansion configuration.
+
+entity:
+  name: Medication
+  source_files:
+    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+
+  code_term_prefix: drug  # Use drug_code, drug_term, drug_source_text instead of medication_*
+  fields:
+    base:
+      - submitter_treatment_id
+      - drug_code
+      - drug_term
+      - drug_dose_units
+      - prescribed_cumulative_drug_dose
+      - actual_cumulative_drug_dose
+    extension:
+      - drug_source_text
+      - drug_note
+  pattern: expansion
+  params:
+    participant_id_field: id_hostseq
+    selection_type: checkbox
+    skip_values: [0, -1]
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Medication Record Expansion
+  # Converts medication checkboxes into N records per participant
+  # Links to parent treatment records via submitter_treatment_id
+  # ---------------------------------------------------------------------------
+  - target_field: submitter_treatment_id
+    target_type: identifier
+    params:
+      prefix_field: id_hostseq
+      type: treatment
+      suffix_fields: [source_field_name]  # Same params as treatment.yaml = matching IDs
+
+# Each checkbox maps to specific medication codes and terms
+configs:
+  # =====================================================================
+  # Home Medications
+  # =====================================================================
+  - source_field: home_meds___1
+    code: "NCIT:C247"
+    term: "ACE Inhibitor"
+    source_label: "Home medications (choice=ACE inhibitor)"
+  
+  - source_field: home_meds___2
+    code: "NCIT:C66930"
+    term: "Angiotensin II Receptor Antagonist"
+    source_label: "Home medications (choice=Angiotensin receptor blocker)"
+  
+  - source_field: home_meds___3
+    code: "NCIT:C843"
+    term: "Steroid Compound"
+    source_label: "Home medications (choice=Steroids)"
+  
+  - source_field: home_meds___4
+    code: "NCIT:C574"
+    term: "Immunosuppressant"
+    source_label: "Home medications (choice=Other immunosuppressive medication)"
+  
+  - source_field: home_meds___5
+    code: "NCIT:C257"
+    term: "Nonsteroidal Antiinflammatory Drug"
+    source_label: "Home medications (choice=NSAIDs)"
+        
+  # =====================================================================
+  # Antivirals
+  # =====================================================================
+  - source_field: antiviral
+    code: "NCIT:C281"
+    term: "Antiviral Agent"
+    source_label: "Antiviral agent"
+  
+  - source_field: antiviral_ribavirin
+    code: "NCIT:C807"
+    term: "Ribavirin"
+    source_label: "Ribavirin"
+  
+  - source_field: antiviral_lopin_riton
+    code: "NCIT:C2096"
+    term: "Lopinavir/Ritonavir"
+    source_label: "Lopinavir/Ritonavir"
+  
+  - source_field: antiviral_interf_a
+    code: "NCIT:C20494"
+    term: "Interferon Alpha"
+    source_label: "Interferon alpha"
+  
+  - source_field: antiviral_interf_b
+    code: "NCIT:C20495"
+    term: "Interferon Beta"
+    source_label: "Interferon beta"
+  
+  - source_field: antiviral_neur_inhibitor
+    code: "NCIT:C217656"
+    term: "Neuraminidase Inhibitor"
+    source_label: "Neuraminidase inhibitor"
+  
+  - source_field: antiviral_other
+    code: "NCIT:C281"
+    term: "Antiviral Agent"
+    source_label: "Other antiviral agent"
+    enrichments:
+      - target_field: drug_note
+        target_type: note
+        source_field: antiviral_other_name
+        
+  # =====================================================================
+  # Antibiotics
+  # =====================================================================
+  - source_field: antibiotic_azithro
+    code: "rxnorm:18631"
+    term: "Azithromycin"
+    source_label: "Azithromycin (Zithromax)"
+  
+  - source_field: antibiotic_other
+    code: "NCIT:C15620"
+    term: "Antibiotic Therapy"
+    source_label: "Any other antibiotic"
+    enrichments:
+      - target_field: drug_note
+        target_type: note
+        source_field: antibiotic_other_name
+        
+  # =====================================================================
+  # Corticosteroids
+  # =====================================================================
+  - source_field: cort
+    code: "NCIT:C2322"
+    term: "Corticosteroid"
+    source_label: "Corticosteroid"
+    enrichments:
+      - target_field: prescribed_cumulative_drug_dose
+        source_field: cort_dose
+      - target_field: actual_cumulative_drug_dose
+        source_field: cort_dose
+      - target_field: [drug_code, drug_term, drug_source_text]
+        source_type: checkbox
+        create_records: true
+        value_mappings:
+          cort_type___1: [rxnorm:6902, "Methylprednisolone", "Specify corticosteroid type (choice=Methylprednisone)"]
+          cort_type___2: [rxnorm:8640, "Prednisone", "Specify corticosteroid type (choice=Prednisone)"]
+          cort_type___3: [rxnorm:8638, "Prednisolone", "Specify corticosteroid type (choice=Prednisolone)"]
+          cort_type___4: [rxnorm:5492, "Hydrocortisone", "Specify corticosteroid type (choice=Hydrocortisone)"]
+          cort_type___5: [NCIT:C2323, "Glucocorticoid", "Specify corticosteroid type (choice=Other)"]
+        
+        
+  # =====================================================================
+  # Antifungal
+  # =====================================================================
+  - source_field: antifungal
+    code: "NCIT:C514"
+    term: "Antifungal Agent"
+    source_label: "Antifungal agent"
+  
+  # =====================================================================
+  # Anti-inflammatory
+  # =====================================================================
+  - source_field: colchicine
+    code: "rxnorm:2683"
+    term: "Colchicine"
+    source_label: "Colchicine"
+  
+  # =====================================================================
+  # Antimalarials
+  # =====================================================================
+  - source_field: chloroq
+    code: "rxnorm:2393"
+    term: "Chloroquine"
+    source_label: "Chloroquine (Aralen)"
+  
+  - source_field: hydroxychloroq
+    code: "rxnorm:5521"
+    term: "Hydroxychloroquine"
+    source_label: "Hydroxycholorquine"
+  
+  # =====================================================================
+  # Biologics and Immunomodulators
+  # =====================================================================
+  - source_field: tocil
+    code: "NCIT:C84217"
+    term: "Tocilizumab"
+    source_label: "Tocilizumab (Actemra)"
+  
+  - source_field: kineret
+    code: "rxnorm:352734"
+    term: "Kineret"
+    source_label: "Kineret (Anakinra)"
+  
+  - source_field: ivig
+    code: "NCIT:C121331"
+    term: "Intravenous Immunoglobulin Therapy"
+    source_label: "IVIG"
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: "id_hostseq"
+  
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+            
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+
+  enrich:
+
+# =============================================================================
+# VALIDATION RULES
+# =============================================================================
+validations:
+  # Treatment ID is required (foreign key)
+  - type: required
+    field: submitter_treatment_id
+
+# =============================================================================
+# POST-PROCESSING STEPS
+# =============================================================================
+post_processing:
+  # Convert dose fields to nullable numeric
+  - type: convert_nullable_int
+    columns: auto
+  - type: filter_records
+    field: drug_code
+    operator: regex_match_any
+    value:
+      - '^rxnorm:\d{1,8}$'
+      - '^NCIT:C\d+$'
+      - '^kegg\.drug:D\d+$'
+      - '^pubchem\.compound:\d+$' 
+

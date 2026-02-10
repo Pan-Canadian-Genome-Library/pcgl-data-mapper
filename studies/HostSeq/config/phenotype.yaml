@@ -1,0 +1,551 @@
+# HostSeq Study - Phenotype Entity Mapping Configuration
+#
+# Target Entity: Phenotype (PCGL Base + Extension Schema)
+# Source: HostSeq REDCap export (main records only, baseline)
+# Pattern: Expansion - Wide-to-long conversion (checkboxes → multiple records)
+#
+# See YAML_CONFIGURATION_GUIDE.md for detailed documentation on expansion configuration.
+
+entity:
+  name: Phenotype
+  source_files:
+    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+
+  fields:
+    base:
+      - submitter_participant_id
+      - age_at_phenotype
+      - phenotype_code
+      - phenotype_term
+      - phenotype_observed
+      - phenotype_duration
+      - phenotype_severity
+    extension:
+      - phenotype_source_text
+      - phenotype_note
+  pattern: expansion
+  params:
+    participant_id_field: id_hostseq
+    selection_type: radio
+    skip_values: []  # create records for all
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: "id_hostseq"
+  
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+            
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+
+  enrich:
+
+# Optional preprocessing steps before mapping
+preprocessing:
+  - type: construct_date
+    target: birth_date
+    params:
+      year_field: dob_year
+      month_field: dob_month
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Phenotype Record Expansion
+  # Converts symptom checkboxes into N records per participant
+  # ---------------------------------------------------------------------------
+  - source_field: id_hostseq
+    target_field: submitter_participant_id
+    source_label: "HostSeq study ID"
+
+  - target_field: age_at_phenotype
+    target_type: age
+    source_label: null
+    params:
+      birth_date_field: birth_date
+      event_date_field: first_symptom_date
+      age_fallback_field: null
+      
+  - target_field: phenotype_observed
+    source_type: radio
+    value_mappings:
+      0: "No"
+      1: "Yes"
+      -1: "Unknown"
+
+# Each radio maps to specific HPO code and term
+configs:
+  # =====================================================================
+  # Primary Symptoms (from clinical presentation)
+  # =====================================================================
+
+  - source_field: first_symptom_none___0
+    code: "HP:0000118"
+    term: "Phenotypic abnormality"
+    source_label: "First symptom - none (asymptomatic)"
+
+  - source_field: cough
+    code: "HP:0012735"
+    term: "Cough"
+    source_label: "Cough"
+    enrichments:
+      - target_field: [phenotype_observed, phenotype_note]
+        source_type: radio
+        value_mappings:
+          0: ["No", null]
+          1: ["Yes", null]
+          2: ["Yes", "cough with sputum production"]
+          3: ["Yes", "cough with bloody sputum/haemoptysis"]
+      - target_field: phenotype_duration
+        source_field: days_cough
+        target_type: integer
+  
+  - source_field: difficulty_breathing
+    code: "HP:0002094"
+    term: "Dyspnea"
+    source_label: "Difficulty breathing"
+    enrichments:
+      - target_field: phenotype_severity
+        source_field: diff_breathing_specify
+        value_mappings:
+          1: "Mild"
+          2: "Moderate"
+          3: "Severe"
+
+  - source_field: fever
+    code: "HP:0001945"
+    term: "Fever"
+    source_label: "Fever"
+    enrichments:
+      - target_field: phenotype_duration
+        source_field: days_fever
+        target_type: integer
+      - target_field: phenotype_note
+        target_type: note
+        source_field: [highest_temp, highest_temp_unit]
+  
+  - source_field: fatigue
+    code: "HP:0012378"
+    term: "Fatigue"
+    source_label: "Fatigue"
+  
+  - source_field: myalgia
+    code: "HP:0003326"
+    term: "Myalgia"
+    source_label: "Myalgia (general aches and pains)"
+  
+  - source_field: runny_nose
+    code: "HP:0031417"
+    term: "Rhinorrhea"
+    source_label: "Runny nose"
+  
+  - source_field: sore_throat
+    code: "HP:0033050"
+    term: "Pharyngalgia"
+    source_label: "Sore throat"
+  
+  - source_field: loss_taste_smell
+    code: "HP:0000458"
+    term: "Anosmia"
+    source_label: "Loss of taste/smell sense"
+    enrichments:
+      - target_field: [phenotype_observed, phenotype_note]
+        source_field: loss_taste_smell_specify
+        value_mappings:
+          1: ["Yes", "Loss of Only smell"]
+          2: ["No", null]
+          3: ["Yes", "Loss of Both taste and smell"]
+          -1: ["Unknown", "Don't know loss of taste or smell"]
+  
+  - source_field: loss_taste_smell
+    code: "HP:0041051"
+    term: "Ageusia"
+    source_label: "Loss of taste/smell sense"
+    enrichments:
+      - target_field: [phenotype_observed, phenotype_note]
+        source_field: loss_taste_smell_specify
+        value_mappings:
+          1: ["No", null]
+          2: ["Yes", "Loss of Only taste"]
+          3: ["Yes", "Loss of Both taste and smell"]
+          -1: ["Unknown", "Don't know loss of taste or smell"]
+
+  - source_field: nosebleed
+    code: "HP:0000421"
+    term: "Epistaxis"
+    source_label: "Nosebleed"
+
+  - source_field: ear_pain
+    code: "HP:0030766"
+    term: "Ear pain"
+    source_label: "Ear pain"
+
+  - source_field: wheezing
+    code: "HP:0030828"
+    term: "Wheezing"
+    source_label: "Wheezing"
+
+  - source_field: chest_pain
+    code: "HP:0100749"
+    term: "Chest pain"
+    source_label: "Chest pain"
+
+  - source_field: joint_pain
+    code: "HP:0002829"
+    term: "Arthralgia"
+    source_label: "Joint pain"
+
+  - source_field: headache
+    code: "HP:0002315"
+    term: "Headache"
+    source_label: "Headache"
+
+  - source_field: seizure
+    code: "HP:0001250"
+    term: "Seizure"
+    source_label: "Seizures"
+  
+  - source_field: alter_consciousness
+    code: "HP:0004372"
+    term: "Reduced consciousness"
+    source_label: "Altered consciousness/confusion"
+
+  - source_field: abdominal_pain
+    code: "HP:0002027"
+    term: "Abdominal pain"
+    source_label: "Abdominal pain"
+
+  - source_field: diarrhea
+    code: "HP:0002014"
+    term: "Diarrhea"
+    source_label: "Diarrhea"
+
+  - source_field: nausea
+    code: "HP:0002017"
+    term: "Nausea and vomiting"
+    source_label: "Nausea/vomiting"
+
+  - source_field: conjunctivitis
+    code: "HP:0000509"
+    term: "Conjunctivitis"
+    source_label: "Conjunctivitis"
+  
+  - source_field: rash
+    code: "HP:0000988"
+    term: "Skin rash"
+    source_label: "Skin rash"
+
+  - source_field: chills
+    code: "HP:0025143"
+    term: "Chills"
+    source_label: "Chills/ Shaking/ Sweat"
+  
+  - source_field: loss_appetite
+    code: "HP:0004396"
+    term: "Poor appetite"
+    source_label: "Loss of appetite/ Reduced appetite"
+  
+  - source_field: weight_loss
+    code: "HP:0001824"
+    term: "Weight loss"
+    source_label: "Weight loss"
+
+  - source_field: sensitive_skin
+    code: "HP:0000951"
+    term: "Abnormality of the skin"
+    source_label: "Sensitive skin"
+
+  - source_field: hair_loss
+    code: "HP:0001596"
+    term: "Alopecia"
+    source_label: "Hair loss"
+
+  - source_field: depression_anxiety
+    code: "HP:0000716"
+    term: "Depression"
+    source_label: "Depression/Anxiety"
+  
+  - source_field: depression_anxiety
+    code: "HP:0000739"
+    term: "Anxiety"
+    source_label: "Depression/Anxiety"
+  
+  - source_field: insomnia
+    code: "HP:0100785"
+    term: "Insomnia"
+    source_label: "Insomnia"
+
+  - source_field: sinus_pain
+    code: "HP:0001742"
+    term: "Nasal congestion"
+    source_label: "Sinus pain/congestion"  
+
+  - source_field: sinus_pain
+    code: "HP:0000245"
+    term: "Abnormal paranasal sinus morphology"
+    source_label: "Sinus pain/congestion"  
+
+  - source_field: dizziness
+    code: "HP:0002321"
+    term: "Vertigo"
+    source_label: "Dizziness/ Vertigo"
+
+
+  - source_field: eye_pain
+    code: "HP:0200026"
+    term: "Ocular pain"
+    source_label: "Eye pain/ Blurred vision"
+
+  - source_field: eye_pain
+    code: "HP:0000622"
+    term: "Blurred vision"
+    source_label: "Eye pain/ Blurred vision"
+
+ 
+  # =====================================================================
+  # Asymptomatic and Symptom Specifications
+  # =====================================================================
+  - source_field: asymptomatic
+    code: "HP:0000118"
+    term: "Phenotypic abnormality"
+    source_label: "Asymptomatic"
+  
+  - source_field: symp_other
+    code: "HP:0000118"
+    term: "Phenotypic abnormality"
+    source_label: "Other symptoms"
+    enrichments:
+      - target_field: phenotype_observed
+        default_value: "Yes"
+      - target_field: phenotype_note
+        target_type: note
+        source_field: [symp_other]
+          
+  
+  # =====================================================================
+  # Complications / Secondary Phenotypes
+  # =====================================================================
+  - source_field: viral_pneumonitis
+    code: "HP:0002090"
+    term: "Pneumonia"
+    source_label: "Viral pneumonitis"
+  
+  - source_field: pneumonia_bact
+    code: "HP:0002090"
+    term: "Pneumonia"
+    source_label: "Bacterial pneumonia"
+
+  - source_field: ards
+    code: "HP:0033677"
+    term: "Acute respiratory distress syndrome"
+    source_label: "Acute respiratory distress syndrome (ARDS)"
+    enrichments:
+      - target_field: phenotype_severity
+        source_field: ards_specify
+        value_mappings:
+          1: "Mild"
+          2: "Moderate"
+          3: "Severe"
+          4: "Missing - Unknown"
+  
+  - source_field: pneumothorax
+    code: "HP:0002107"
+    term: "Pneumothorax"
+    source_label: "Pneumothorax"
+  
+  - source_field: pleural_effusion
+    code: "HP:0002202"
+    term: "Pleural effusion"
+    source_label: "Pleural effusion"
+  
+  - source_field: cop
+    code: "HP:0011945"
+    term: "Bronchiolitis obliterans organizing pneumonia"
+    source_label: "Cryptogenic organizing pneumonia (COP)"
+  
+  - source_field: bronchiolitis
+    code: "HP:0011950"
+    term: "Bronchiolitis"
+    source_label: "Bronchiolitis"
+  
+  - source_field: menin_enceph
+    code: "HP:0002383"
+    term: "Encephalitis"
+    source_label: "Meningitis / Encephalitis"
+  
+  - source_field: comp_seizure
+    code: "HP:0001250"
+    term: "Seizure"
+    source_label: "Seizure"
+  
+  - source_field: comp_stroke
+    code: "HP:0001297"
+    term: "Stroke"
+    source_label: "Stroke / Cerebrovascular accident"
+  
+  - source_field: chf
+    code: "HP:0001635"
+    term: "Congestive heart failure"
+    source_label: "Congestive heart failure"
+    enrichments:
+      - target_field: phenotype_note
+        source_field: chf_lvef
+        source_label: "Specify left ventricular ejection fraction status"
+        value_mappings:
+          1: "LVEF: Normal"
+          2: "LVEF: Decreased"
+          -1: "LVEF: Unknown"
+      - target_field: phenotype_note
+        target_type: note
+        source_field: chf_decrease
+        source_label: "Specify % decrease"
+  
+  - source_field: cardiac_inflam
+    code: "HP:0012819"
+    term: "Myocarditis"
+    source_label: "Cardiac inflammation"
+    enrichments:
+      - target_field: [phenotype_code, phenotype_term, phenotype_source_text]
+        source_type: checkbox
+        create_records: true
+        value_mappings:
+          cardiac_inflam_type___1: ["HP:0100584", "Endocarditis", "Specify cardiac inflammation type (choice=Endocarditis)"]
+          cardiac_inflam_type___2: ["HP:0012819", "Myocarditis", "Specify cardiac inflammation type (choice=Myocarditis)"]
+          cardiac_inflam_type___3: ["HP:0001701", "Pericarditis", "Specify cardiac inflammation type (choice=Pericarditis)"]
+          
+  - source_field: cardiac_arrhyth
+    code: "HP:0011675"
+    term: "Arrhythmia"
+    source_label: "Cardiac arrhythmia"
+    enrichments:
+      - target_field: phenotype_note
+        target_type: note
+        source_field: ["cardiac_arrhyth_type_other"]
+      - target_field: [phenotype_code, phenotype_term, phenotype_source_text]
+        source_type: checkbox
+        create_records: true
+        value_mappings:
+          cardiac_arrhyth_type___1: ["HP:0005110", "Atrial fibrillation", "Specify cardiac arrhythmia type (choice=AF)"]
+          cardiac_arrhyth_type___2: ["HP:0004756", "Ventricular tachycardia", "Specify cardiac arrhythmia type (choice=VT/VF)"]
+          cardiac_arrhyth_type___3: ["HP:0011675", "Arrhythmia", "Specify cardiac arrhythmia type (choice=Other)"]
+  
+  - source_field: cardiac_ischaemia
+    code: "HP:0033678"
+    term: "Acute coronary syndrome"
+    source_label: "Cardiac ischaemia"
+    enrichments:
+      - target_field: phenotype_note
+        source_type: checkbox
+        create_records: false
+        value_mappings:
+          cardiac_ischaemia_type___1: "Specify cardiac ischaemia type (choice=STEMI)"
+          cardiac_ischaemia_type___2: "Specify cardiac ischaemia type (choice=NSTEMI)"
+          cardiac_ischaemia_type___3: "Specify cardiac ischaemia type (choice=Cath)"
+          cardiac_ischaemia_type___4: "Specify cardiac ischaemia type (choice=Stent)"
+  
+  - source_field: cardiac_arrest
+    code: "HP:0001695"
+    term: "Cardiac arrest"
+    source_label: "Cardiac arrest"
+  
+  - source_field: coag_disorder
+    code: "HP:0005521"
+    term: "Disseminated intravascular coagulation"
+    source_label: "Coagulation disorder / Disseminated intravascular coagulation"
+  
+  - source_field: anemia
+    code: "HP:0001903"
+    term: "Anemia"
+    source_label: "Anemia"
+  
+  - source_field: rhabdo_myo
+    code: "HP:0003201"
+    term: "Rhabdomyolysis"
+    source_label: "Rhabdomyolysis / Myositis"
+  
+  - source_field: ari_arf
+    code: "HP:0001919"
+    term: "Acute kidney injury"
+    source_label: "Acute renal injury/ Acute renal failure"
+  
+  - source_field: gastro_haemo
+    code: "HP:0002239"
+    term: "Gastrointestinal hemorrhage"
+    source_label: "Gastrointestinal haemorrhage"
+  
+  - source_field: pancreatitis
+    code: "HP:0001733"
+    term: "Pancreatitis"
+    source_label: "Pancreatitis"
+  
+  - source_field: liver_dysf
+    code: "HP:0001410"
+    term: "Decreased liver function"
+    source_label: "Liver dysfunction"
+  
+  - source_field: hyperglycemia
+    code: "HP:0003074"
+    term: "Hyperglycemia"
+    source_label: "Hyperglycemia"
+  
+  - source_field: hypoglycemia
+    code: "HP:0001943"
+    term: "Hypoglycemia"
+    source_label: "Hypoglycemia"
+  
+  - source_field: inflam_syndrom
+    code: "NCIT:C34825"
+    term: "Kawasaki Disease"
+    source_label: "Inflammatory syndrome/Kawasaki disease like"
+  
+  - source_field: comp_other
+    code: "HP:0025142"
+    term: "Constitutional symptom"
+    source_label: "Other complications"
+    enrichments:
+      - target_field: phenotype_note
+        target_type: note
+        source_field: comp_other_desc
+
+
+
+# =============================================================================
+# VALIDATION RULES
+# =============================================================================
+validations:
+  # Participant ID is required
+  - type: required
+    field: submitter_participant_id
+
+# =============================================================================
+# POST-PROCESSING STEPS
+# =============================================================================
+post_processing:
+  # Convert age and duration fields to nullable integer
+  - type: convert_nullable_int
+    columns: auto
+  - type: filter_records
+    field: phenotype_code
+    operator: regex_match_any
+    value:
+      - '^HP:[0-9]{7}$' 
+

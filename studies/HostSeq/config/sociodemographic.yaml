@@ -1,0 +1,447 @@
+# HostSeq Study - Sociodemographic Entity Mapping Configuration
+#
+# Target Entity: Sociodemographic (PCGL Base + Extension Schema)
+# Source: HostSeq REDCap export (main records only, baseline)
+# Pattern: Direct mapping (one sociodemographic record per participant)
+#
+# See YAML_CONFIGURATION_GUIDE.md for detailed documentation.
+
+entity:
+  name: Sociodemographic
+  source_files:
+    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+
+  fields:
+    base:
+      - submitter_sociodem_id
+      - submitter_participant_id
+      - age_at_sociodem_collection
+      - sociodem_date_collection
+      - race
+      - race_another_racial_category
+      - race_collect_method
+      - gender
+      - gender_another_gender
+      - gender_collect_method
+      - ethnicity
+      - ethnicity_another_category
+      - ethnicity_collect_method
+      - sex_at_birth
+      - sex_another_category
+      - sex_collect_method
+      - education
+      - education_collect_method
+      - personal_income
+      - personal_income_collect_method
+      - geographic_location
+      - geographic_location_additional
+      - geographic_location_collect_method
+      - sociodem_question
+      - sociodem_question_detail
+      - sociodem_notes
+    extension:
+      - birth_country
+      - birth_place
+      - dob_month
+      - dob_year
+      - ancestry
+      - height_cm
+      - weight_kg
+      - employment_status
+      - employment_other
+      - residence_type
+      - residence_type_other
+      - household_size
+      - currently_pregnant
+      - pregnancy_weeks
+  pattern: direct
+
+# =============================================================================
+# PREPROCESSING STEPS
+# =============================================================================
+preprocessing:
+  # Clean numeric fields that may have comma separators (e.g., "2,004" → 2004)
+  - type: clean_numeric
+    fields: [dob_year]
+  - type: construct_date
+    target: birth_date
+    params:
+      year_field: dob_year
+      month_field: dob_month
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: "id_hostseq"
+  
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+            
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+
+  enrich:
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Sociodemographic Identifier
+  # Format: {participant_id}_sociodem_{seq}
+  # ---------------------------------------------------------------------------
+  - source_field: id_hostseq
+    target_field: submitter_sociodem_id
+    source_label: null
+    target_type: identifier
+    params:
+      prefix_field: id_hostseq
+      type: sociodem
+      suffix_fields: null  # Auto-generate unique ID per sociodem record
+  
+  # ---------------------------------------------------------------------------
+  # Participant Identifier
+  # ---------------------------------------------------------------------------
+  - source_field: id_hostseq
+    target_field: submitter_participant_id
+    source_label: "HostSeq study ID"
+  
+  # ---------------------------------------------------------------------------
+  # Age at Collection
+  # ---------------------------------------------------------------------------
+  - source_field: age
+    target_field: age_at_sociodem_collection
+    target_type: age
+    source_label: "Source study enrollment date"
+    params:
+      birth_date_field: birth_date
+      event_date_field: enrollment_date
+      age_fallback_field: age
+  
+  # ---------------------------------------------------------------------------
+  # Collection Date
+  # ---------------------------------------------------------------------------
+  - source_field: enrollment_date
+    target_field: sociodem_date_collection
+    source_label: "Source study enrollment date"
+    target_type: date
+  
+  # ---------------------------------------------------------------------------
+  # Race (Not collected in HostSeq)
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: race
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  - source_field: null
+    target_field: race_another_racial_category
+    source_label: null
+    default_value: null
+  
+  - source_field: null
+    target_field: race_collect_method
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  # ---------------------------------------------------------------------------
+  # Gender
+  # ---------------------------------------------------------------------------
+  - source_field: gender
+    target_field: gender
+    source_label: "Gender"
+    value_mappings:
+      0: "Man"
+      1: "Woman"
+      2: "Another Gender"
+      3: "Prefer not to answer"
+    default_value: "Missing - Not provided"
+  
+  - source_field: gender_desc
+    target_field: gender_another_gender
+    source_label: "Please describe your gender"
+  
+  - source_field: null
+    target_field: gender_collect_method
+    source_label: null
+    default_value: "Self-identified"
+  
+  # ---------------------------------------------------------------------------
+  # Ethnicity (Not collected in HostSeq)
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: ethnicity
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  - source_field: null
+    target_field: ethnicity_another_category
+    source_label: null
+    default_value: null
+  
+  - source_field: null
+    target_field: ethnicity_collect_method
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  # ---------------------------------------------------------------------------
+  # Sex at Birth
+  # ---------------------------------------------------------------------------
+  - source_field: sex
+    target_field: sex_at_birth
+    source_label: "Sex at birth"
+    value_mappings:
+      0: "Male"
+      1: "Female"
+      2: "Another Sex"
+    default_value: "Missing - Not provided"
+  
+  - source_field: sex
+    target_field: sex_another_category
+    source_label: "Sex at birth"
+    value_mappings:
+      0: null
+      1: null
+      2: "Not specified"    
+    default_value: null
+  
+  - source_field: null
+    target_field: sex_collect_method
+    source_label: null
+    default_value: "Self-identified"
+  
+  # ---------------------------------------------------------------------------
+  # Education
+  # ---------------------------------------------------------------------------
+  - source_field: education
+    target_field: education
+    source_label: "Education"
+    value_mappings:
+      1: "Elementary school or equivalent"
+      2: "High school (secondary school) diploma or equivalency certificate"
+      3: "College, CEGEP, or other non-university certificate or diploma"
+      4: "Bachelor's degree"
+      5: "Master’s degree"
+      -1: "Missing - Unknown"
+    default_value: "Missing - Not provided"
+  
+  - source_field: null
+    target_field: education_collect_method
+    source_label: null
+    default_value: "Self-identified"
+  
+  # ---------------------------------------------------------------------------
+  # Personal Income (Not collected in HostSeq)
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: personal_income
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  - source_field: null
+    target_field: personal_income_collect_method
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  # ---------------------------------------------------------------------------
+  # Geographic Location (Not collected in HostSeq)
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: geographic_location
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  - source_field: null
+    target_field: geographic_location_additional
+    source_label: null
+    default_value: null
+  
+  - source_field: null
+    target_field: geographic_location_collect_method
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  # ---------------------------------------------------------------------------
+  # Sociodem Question and Detail
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: sociodem_question
+    source_label: null
+    default_value: "Another question"
+  
+  - target_field: sociodem_question_detail
+    default_value: ["sex", "gender", "education"]
+
+  # ---------------------------------------------------------------------------
+  # Sociodem Notes
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: sociodem_notes
+    source_label: null
+
+  # ---------------------------------------------------------------------------
+  # Birth Information
+  # ---------------------------------------------------------------------------
+  - source_field: birth_country
+    target_field: birth_country
+    source_label: "Country of birth"
+  
+  - source_field: birth_place
+    target_field: birth_place
+    source_label: "Place of birth"
+    value_mappings:
+      0: "North America"
+      1: "Central and South America"
+      2: "Africa"
+      3: "East/West Europe"
+      4: "Middle East/ Central Asia"
+      5: "East Asia/ Southeast Asia"
+      6: "South Asia"
+      7: "Oceania"
+      8: "Other"
+  
+  - source_field: dob_month
+    target_field: dob_month
+    source_label: "Date of birth - Month"
+    value_mappings:
+      1: "January"
+      2: "February"
+      3: "March"
+      4: "April"
+      5: "May"
+      6: "June"
+      7: "July"
+      8: "August"
+      9: "September"
+      10: "October"
+      11: "November"
+      12: "December"
+      -1: "Don't know"
+  
+  - source_field: dob_year
+    target_field: dob_year
+    source_label: "Date of birth - Year"
+    target_type: integer
+  
+  # ---------------------------------------------------------------------------
+  # Ancestry
+  # ---------------------------------------------------------------------------
+  - source_field: ancestry
+    target_field: ancestry
+    source_label: "Ancestry"
+    value_mappings:
+      0: "White"
+      1: "Black"
+      2: "Hispanic"
+      3: "East Asian / Pacific Islander"
+      4: "South Asian"
+      5: "Middle Eastern or Central Asian"
+      6: "More than one race"
+      7: "Indigenous (First Nations, Metis, Inuit)"
+      8: "Ashkenazi Jewish"
+      9: "Sephardic Jewish"
+      10: "Other"
+      -1: "Prefer not to answer/ Don't know"
+  
+  # ---------------------------------------------------------------------------
+  # Physical Measurements
+  # ---------------------------------------------------------------------------
+  - source_field: height
+    target_field: height_cm
+    source_label: "Height (cm)"
+  
+  - source_field: weight
+    target_field: weight_kg
+    source_label: "Weight (kg)"
+  
+  # ---------------------------------------------------------------------------
+  # Employment
+  # ---------------------------------------------------------------------------
+  - source_field: employment
+    target_field: employment_status
+    source_label: "Employment status"
+    value_mappings:
+      1: "Healthcare worker (excluding long-term health care provider)"
+      3: "Long-term care facility employee"
+      2: "Factory worker"
+      4: "Grocery store employee"
+      5: "Tourism/travel worker"
+      6: "Other"
+      -1: "Unknown"
+  
+  - source_field: employment_other
+    target_field: employment_other
+    source_label: "Employment status - Other"
+  
+  # ---------------------------------------------------------------------------
+  # Residence
+  # ---------------------------------------------------------------------------
+  - source_field: residence_type
+    target_field: residence_type
+    source_label: "Residence type"
+    value_mappings:
+      1: "Personal residence"
+      2: "Long term care facility"
+      3: "Another institution"
+      4: "Unknown"
+  
+  - source_field: residence_type_other
+    target_field: residence_type_other
+    source_label: "Residence type - Other"
+    
+  - source_field: household
+    target_field: household_size
+    source_label: "Household size"
+    target_type: integer
+  
+  # ---------------------------------------------------------------------------
+  # Pregnancy
+  # ---------------------------------------------------------------------------
+  - source_field: pregnancy
+    target_field: currently_pregnant
+    source_label: "Currently pregnant"
+    value_mappings:
+      0: "No"
+      1: "Yes"
+  
+  - source_field: pregnancy_weeks
+    target_field: pregnancy_weeks
+    source_label: "Pregnancy weeks"
+
+
+# =============================================================================
+# VALIDATION RULES
+# =============================================================================
+validations:
+  # Participant ID is required
+  - type: required
+    field: submitter_participant_id
+  
+  # Sociodem ID is required
+  - type: required
+    field: submitter_sociodem_id
+  - type: required
+    field: sociodem_date_collection
+
+# =============================================================================
+# POST-PROCESSING STEPS
+# =============================================================================
+post_processing:
+  # Convert age fields to nullable integer
+  - type: convert_nullable_int
+    columns: [dob_year, age_at_sociodem_collection, household_size]

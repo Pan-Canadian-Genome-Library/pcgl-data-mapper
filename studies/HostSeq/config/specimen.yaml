@@ -1,0 +1,205 @@
+# HostSeq Study - Specimen Entity Mapping Configuration
+#
+# Target Entity: Specimen (PCGL Base Schema)
+# Source: HostSeq REDCap export (main records only)
+# Pattern: Direct mapping (one specimen per source record)
+#
+# See YAML_CONFIGURATION_GUIDE.md for detailed documentation.
+
+entity:
+  name: Specimen
+
+  source_files:
+    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+    secondary:
+      - file: "specimen_tissue_source.tsv"
+        join_on: id_hostseq
+        join_type: left
+
+  fields:
+    base:
+      - submitter_participant_id
+      - submitter_specimen_id
+      - specimen_tissue_source_code
+      - specimen_tissue_source_term
+      - specimen_storage
+      - specimen_processing
+      - age_at_specimen_collection
+      - specimen_anatomic_location_code
+      - specimen_anatomic_location_term
+      - specimen_laterality
+  pattern: direct
+
+preprocessing:
+  - type: construct_date
+    target: birth_date
+    params:
+      year_field: dob_year
+      month_field: dob_month
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: "id_hostseq"
+  
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+        - field: dna_number
+          op: is_not_null
+
+  enrich:
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Participant Identifier
+  # Source: id_hostseq (HostSeq study ID)
+  # ---------------------------------------------------------------------------
+  - source_field: id_hostseq
+    target_field: submitter_participant_id
+    source_label: "HostSeq study ID"
+  
+  # ---------------------------------------------------------------------------
+  # Specimen Identifier
+  # Generated using generate_record_id utility
+  # Pattern: {participant_id}_specimen_{dna_number}
+  # ---------------------------------------------------------------------------
+  - source_field: dna_number
+    target_field: submitter_specimen_id
+    source_label: 'DNA number (lab use only)'
+  
+  # ---------------------------------------------------------------------------
+  # Tissue Source Code
+  # NCIT code for specimen tissue type
+  # ---------------------------------------------------------------------------
+  - source_field: specimen_tissue_source
+    target_field: specimen_tissue_source_code
+    source_label: null
+    default_value: "NCIT:C12434"
+    value_mappings:
+      "Blood": "NCIT:C12434"
+      "Saliva": "NCIT:C13275"
+  
+  # ---------------------------------------------------------------------------
+  # Tissue Source Term
+  # NCIT preferred term for specimen tissue type
+  # ---------------------------------------------------------------------------
+  - source_field: specimen_tissue_source
+    target_field: specimen_tissue_source_term
+    source_label: null
+    default_value: "Blood"
+    value_mappings:
+      "Blood": "Blood"
+      "Saliva": "Saliva"
+  # ---------------------------------------------------------------------------
+  # Specimen Storage
+  # Storage method/conditions
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: specimen_storage
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  # ---------------------------------------------------------------------------
+  # Specimen Processing
+  # Processing method/protocol
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: specimen_processing
+    source_label: null
+    default_value: "Missing - Not collected"
+  
+  # ---------------------------------------------------------------------------
+  # Age at Specimen Collection
+  # Calculated in days from birth date and collection date
+  # ---------------------------------------------------------------------------
+  - source_field: dna_received_date
+    target_field: age_at_specimen_collection
+    source_label: "Date sample was received"
+    target_type: age
+    params:
+      birth_date_field: birth_date
+      event_date_field: dna_received_date
+  
+  # ---------------------------------------------------------------------------
+  # Anatomic Location Code
+  # UBERON code for specimen anatomic location
+  # ---------------------------------------------------------------------------
+  - source_field: specimen_tissue_source
+    target_field: specimen_anatomic_location_code
+    source_label: null
+    default_value: "UBERON:0000178"
+    value_mappings:
+      "Blood": "UBERON:0000178"
+      "Saliva": "UBERON:0001836"
+  
+  # ---------------------------------------------------------------------------
+  # Anatomic Location Term
+  # UBERON preferred term for specimen anatomic location
+  # ---------------------------------------------------------------------------
+  - source_field: specimen_tissue_source
+    target_field: specimen_anatomic_location_term
+    source_label: null
+    default_value: "Blood"
+    value_mappings:
+      "Blood": "Blood"
+      "Saliva": "Saliva"
+  
+  # ---------------------------------------------------------------------------
+  # Specimen Laterality
+  # Left/Right/Bilateral/Not applicable
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: specimen_laterality
+    source_label: null
+    default_value: "Not applicable"
+
+
+
+# =============================================================================
+# VALIDATION RULES
+# =============================================================================
+validations:
+  # Participant ID is required
+  - type: required
+    field: submitter_participant_id
+  
+  # Specimen ID is required
+  - type: required
+    field: submitter_specimen_id
+
+  - type: unique
+    field: submitter_specimen_id
+
+# =============================================================================
+# POST-PROCESSING STEPS
+# =============================================================================
+post_processing:
+  # Convert age fields to nullable integer
+  - type: convert_nullable_int
+    columns: auto
+  - type: filter_records
+    field: specimen_tissue_source_code
+    operator: regex_match_any
+    value:
+      - '^NCIT:C[0-9]+$'

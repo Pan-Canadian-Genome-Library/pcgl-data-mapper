@@ -1,0 +1,128 @@
+# HostSeq Study - Sample Entity Mapping Configuration
+#
+# Target Entity: Sample (PCGL Base Schema)
+# Source: HostSeq REDCap export (main records only)
+# Pattern: Direct mapping (one sample per source record)
+#
+# See YAML_CONFIGURATION_GUIDE.md for detailed documentation.
+
+entity:
+  name: Sample
+  source_files:
+    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+
+  fields:
+    base:
+      - submitter_sample_id
+      - submitter_specimen_id
+      - molecule_type_code
+      - molecule_type_term
+      - sample_status
+  pattern: direct
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Sample Identifier
+  # Generated using generate_record_id utility
+  # Pattern: {participant_id}_sample_{dna_number}
+  # ---------------------------------------------------------------------------
+  - source_field: dna_number
+    target_field: submitter_sample_id
+    source_label: 'DNA number (lab use only)'
+  
+  # ---------------------------------------------------------------------------
+  # Specimen Identifier
+  # Links sample to parent specimen record
+  # Pattern: {participant_id}_specimen_{dna_number}
+  # ---------------------------------------------------------------------------
+  - source_field: dna_number
+    target_field: submitter_specimen_id
+    source_label: 'DNA number (lab use only)'
+  
+  # ---------------------------------------------------------------------------
+  # Molecule Type Code
+  # GENEPIO code for molecule type (DNA/RNA/etc)
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: molecule_type_code
+    source_label: null
+    default_value: "SO:0000991"
+  
+  # ---------------------------------------------------------------------------
+  # Molecule Type Term
+  # GENEPIO preferred term for molecule type
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: molecule_type_term
+    source_label: null
+    default_value: "Genomic DNA"
+  
+  # ---------------------------------------------------------------------------
+  # Sample Status
+  # Sample quality/availability status
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: sample_status
+    source_label: null
+    default_value: "Case"
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: "id_hostseq"
+
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+        - field: dna_number
+          op: is_not_null
+
+  enrich:
+
+# =============================================================================
+# VALIDATION RULES
+# =============================================================================
+validations:
+  # Sample ID is required
+  - type: required
+    field: submitter_sample_id
+  
+  # Specimen ID is required
+  - type: required
+    field: submitter_specimen_id
+
+  - type: unique
+    field: submitter_sample_id
+
+# =============================================================================
+# POST-PROCESSING STEPS
+# =============================================================================
+post_processing: 
+  - type: filter_records
+    field: molecule_type_code
+    operator: regex_match_any
+    value:
+      - '^NCIT:C[0-9]+$'
+      - '^SO:\d{7}$'
+
+

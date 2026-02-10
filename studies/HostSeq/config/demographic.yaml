@@ -1,0 +1,195 @@
+# HostSeq Study - Demographic Entity Mapping Configuration
+#
+# This configuration maps HostSeq demographic data to the PCGL Demographic entity.
+# The Demographic entity captures participant demographics including age, vital status,
+# and study-specific information.
+#
+# Target Entity: Demographic (PCGL Base + Extension Schema)
+# Source: HostSeq REDCap export (main records only)
+# Mapper: ConfigurableEntityMapper
+
+entity:
+  name: Demographic
+  source_files:
+    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+
+  fields:
+    base:
+      - submitter_participant_id
+      - age_at_enrollment
+      - vital_status
+      - cause_of_death
+      - age_at_death
+    extension:
+      - host_hospital
+      - treat_hospital
+      - demographic_note
+      - outcome_self_care
+      - outcome_transfer
+
+# Optional preprocessing steps before mapping
+preprocessing:
+  - type: construct_date
+    target: birth_date
+    params:
+      year_field: dob_year
+      month_field: dob_month
+
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: id_hostseq
+  
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+  
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+  
+  enrich:
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Participant Identifier
+  # Links to Participant entity
+  # ---------------------------------------------------------------------------
+  - source_field: id_hostseq
+    target_field: submitter_participant_id
+    source_label: "HostSeq study ID"
+  
+  # ---------------------------------------------------------------------------
+  # Age at Enrollment
+  # Calculated from birth date (dob_year, dob_month) and enrollment_date
+  # Falls back to age field if birth date unavailable
+  # Result in days
+  # ---------------------------------------------------------------------------
+  - source_field: enrollment_date
+    target_field: age_at_enrollment
+    source_label: "Source study enrollment date"
+    target_type: age
+    params:
+      birth_date_field: birth_date
+      event_date_field: enrollment_date
+      age_fallback_field: age
+  
+  # ---------------------------------------------------------------------------
+  # Vital Status
+  # Maps outcome codes to vital status with descriptions
+  # Dependent fields: age_at_death and cause_of_death when status='Deceased'
+  # 
+  # Value Mappings:
+  #   0 = Alive (Discharged alive)
+  #   1 = Alive (Hospitalization ongoing)
+  #   2 = Missing - Unknown (Transfer to another facility)
+  #   3 = Deceased (Death)
+  #   4 = Missing - Unknown (Palliative discharge - likely deceased but not confirmed)
+  #   5 = Alive (Not hospitalized)
+  #  -1 = Missing - Unknown (Don't know)
+  # ---------------------------------------------------------------------------
+  - source_field: outcome
+    target_field: [vital_status, cause_of_death, demographic_note]
+    source_label: "Outcome"
+    default_value: "Missing - Not provided"
+    value_mappings:
+      0: ["Alive", null, "Discharged alive"]
+      1: ["Alive", null, "Hospitalization (ongoing)"]
+      2: ["Missing - Unknown", null,  "Transfer to another facility"]
+      3: ["Deceased", "Died of other reasons", "Death"]
+      4: ["Missing - Unknown", null, "Palliative discharge (likely deceased but not confirmed)"]
+      5: ["Alive", null, "Not hospitalized"]
+      -1: ["Missing - Unknown", null, "Don't know"]
+    
+  # Age at death - calculated from birth date and outcome_date
+  - source_field: outcome_date
+    source_label: "Outcome date"
+    target_field: age_at_death
+    target_type: age
+    default_value: null
+    params:
+      birth_date_field: birth_date
+      event_date_field: outcome_date
+      age_fallback_field: null
+  
+  # =============================================================================
+  # FIELD MAPPINGS - EXTENSION SCHEMA (Study-Specific)
+  # =============================================================================    
+  # ---------------------------------------------------------------------------
+  # Host Hospital
+  # Hospital where participant was recruited
+  # ---------------------------------------------------------------------------
+  - source_field: host_hospital
+    target_field: host_hospital
+    source_label: "Host hospital"
+  
+  # ---------------------------------------------------------------------------
+  # Treatment Hospital
+  # Hospital where participant received treatment
+  # ---------------------------------------------------------------------------
+  - source_field: treat_hospital
+    target_field: treat_hospital
+    source_label: "Treating hospital"
+  
+  # ---------------------------------------------------------------------------
+  # Outcome Self Care
+  # Patient's ability to perform self-care activities
+  # ---------------------------------------------------------------------------
+  - source_field: outcome_self_care
+    target_field: outcome_self_care
+    source_label: "Ability to self-care at discharge versus before illness"
+    value_mappings:
+      0: Same as before illness
+      1: Worse
+      2: Better
+      -1: Don't know
+  
+  # ---------------------------------------------------------------------------
+  # Outcome Transfer
+  # Patient's ability to transfer/move
+  # ---------------------------------------------------------------------------
+  - source_field: outcome_transfer
+    target_field: outcome_transfer
+    source_label: "Transfer facility name"
+
+
+
+# =============================================================================
+# VALIDATION RULES
+# =============================================================================
+validations:
+  # Participant ID is required
+  - type: required
+    field: submitter_participant_id
+  
+  # Age at enrollment must be within reasonable range (0-120 years)
+  - type: age_range
+    field: age_at_enrollment
+    min_age: 0
+    max_age: 43800  # 120 years * 365 days
+  
+
+# =============================================================================
+# POST-PROCESSING STEPS
+# =============================================================================
+post_processing:
+  # Convert age fields to nullable integer type (Int64)
+  # This preserves integer display while allowing null values
+  - type: convert_nullable_int
+    columns: auto  # Auto-detect columns with 'age' in name
