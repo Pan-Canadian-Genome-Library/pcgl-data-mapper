@@ -513,6 +513,51 @@ class EntityMapper:
         # Format as YYYY-MM-DD
         return f"{year_val}-{month_val:02d}-{day_val:02d}"
     
+    def _find_first_matching_date(
+        self,
+        row: pd.Series,
+        result_cols: List[str],
+        date_cols: List[str],
+        match_value: Any,
+        match_operator: str = 'equals'
+    ) -> Optional[str]:
+        """
+        Find the first date where the corresponding result matches the condition.
+        
+        Iterates through result columns in order and returns the date from the
+        corresponding date column when a match is found.
+        
+        Args:
+            row: DataFrame row
+            result_cols: Ordered list of result column names
+            date_cols: Ordered list of date column names (must match result_cols length)
+            match_value: Value to match against (or list for 'in' operator)
+            match_operator: Comparison operator ('equals', 'in', 'not_equals', 'is_not_null')
+            
+        Returns:
+            First matching date string, or None if no match found
+        """
+        for result_col, date_col in zip(result_cols, date_cols):
+            result_val = row.get(result_col)
+            date_val = row.get(date_col)
+            
+            # Check if result matches condition
+            matches = False
+            if match_operator == 'equals':
+                matches = (pd.notna(result_val) and result_val == match_value)
+            elif match_operator == 'in':
+                matches = (pd.notna(result_val) and result_val in match_value)
+            elif match_operator == 'not_equals':
+                matches = (pd.notna(result_val) and result_val != match_value)
+            elif match_operator == 'is_not_null':
+                matches = pd.notna(result_val)
+            
+            # If match found and date is valid, return it
+            if matches and pd.notna(date_val):
+                return str(date_val)
+        
+        return None
+    
     def preprocess(self, source_df: pd.DataFrame, **kwargs) -> pd.DataFrame:
         """
         Preprocess source data before mapping.
@@ -743,14 +788,115 @@ class EntityMapper:
                     fields_desc = [year_field, month_field]
                     if day_field:
                         fields_desc.append(day_field)
-                    self.logger.info(f"Constructed date field '{target}' from {', '.join(fields_desc)}")
+                    
+                    # Debug info: show sample values
+                    valid_dates = df[target].notna().sum()
+                    total_rows = len(df)
+                    self.logger.info(
+                        f"Constructed date field '{target}' from {', '.join(fields_desc)}: "
+                        f"{valid_dates}/{total_rows} valid dates"
+                    )
+                    
+                    # Show first few examples for debugging
+                    sample_df = df[[year_field, month_field, target]].head(3)
+                    if day_field and day_field in df.columns:
+                        sample_df = df[[year_field, month_field, day_field, target]].head(3)
+                    self.logger.debug(f"Sample {target} values:\n{sample_df.to_string()}")
                     
                 except Exception as e:
                     self.logger.error(f"Error constructing date field '{target}': {e}")
                     raise ValueError(f"Invalid construct_date configuration for '{target}': {e}") from e
             
+            elif step_type == 'select_first_match':
+                # Select first matching value across multiple columns (e.g., first positive test)
+                target = step.get('target')
+                params = step.get('params', {})
+                
+                if not target:
+                    continue
+                
+                result_pattern = params.get('result_pattern')  # e.g., 'covidtest_result_*'
+                date_pattern = params.get('date_pattern')      # e.g., 'covidtest_date_*'
+                match_value = params.get('match_value')        # e.g., 'Positive' or 1
+                match_operator = params.get('match_operator', 'equals')  # 'equals', 'in', 'not_equals', 'is_not_null'
+                
+                if not result_pattern or not date_pattern:
+                    self.logger.warning(f"Skipping select_first_match for '{target}': missing result_pattern or date_pattern")
+                    continue
+                
+                try:
+                    # Resolve patterns to actual column names
+                    result_cols = self._resolve_field_patterns(df, [result_pattern])
+                    date_cols = self._resolve_field_patterns(df, [date_pattern])
+                    
+                    if not result_cols or not date_cols:
+                        self.logger.warning(f"No columns found matching patterns: {result_pattern}, {date_pattern}")
+                        continue
+                    
+                    self.logger.info(f"Found {len(result_cols)} result columns and {len(date_cols)} date columns")
+                    self.logger.debug(f"Result columns: {result_cols[:5]}{'...' if len(result_cols) > 5 else ''}")
+                    self.logger.debug(f"Date columns: {date_cols[:5]}{'...' if len(date_cols) > 5 else ''}")
+                    
+                    if len(result_cols) != len(date_cols):
+                        self.logger.warning(
+                            f"Mismatch in column counts: {len(result_cols)} result columns vs {len(date_cols)} date columns"
+                        )
+                        # Use minimum count to avoid index errors
+                        min_count = min(len(result_cols), len(date_cols))
+                        result_cols = result_cols[:min_count]
+                        date_cols = date_cols[:min_count]
+                    
+                    # Sort columns to ensure correct pairing (e.g., _1, _2, ... _37)
+                    result_cols = sorted(result_cols)
+                    date_cols = sorted(date_cols)
+                    
+                    # Debug: Show sample values from result columns
+                    sample_result_values = {}
+                    for col in result_cols[:3]:
+                        unique_vals = df[col].dropna().unique()
+                        sample_result_values[col] = list(unique_vals[:5])
+                    if sample_result_values:
+                        self.logger.info(f"Sample values from result columns: {sample_result_values}")
+                        self.logger.info(f"Looking for match: {match_operator} {match_value}")
+                    
+                    df[target] = df.apply(
+                        lambda row: self._find_first_matching_date(
+                            row, result_cols, date_cols, match_value, match_operator
+                        ),
+                        axis=1
+                    )
+                    
+                    matched_count = df[target].notna().sum()
+                    self.logger.info(
+                        f"Selected first matching date for '{target}' from {len(result_cols)} visit columns "
+                        f"(matched {matched_count}/{len(df)} records)"
+                    )
+                    
+                    # Show sample results for debugging
+                    if matched_count > 0:
+                        sample_matched = df[df[target].notna()][[target]].head(3)
+                        self.logger.debug(f"Sample {target} values:\n{sample_matched.to_string()}")
+                    else:
+                        self.logger.warning(f"No matching dates found for '{target}'")
+                    
+                except Exception as e:
+                    self.logger.error(f"Error in select_first_match for '{target}': {e}")
+                    raise ValueError(f"Invalid select_first_match configuration for '{target}': {e}") from e
+            
             else:
                 self.logger.warning(f"Unknown preprocessing type: {step_type}")
+        
+        # Debug: Log available fields after preprocessing for age calculation
+        age_related_fields = ['birth_date', 'sx_date', 'reinfx_date', 'diagnosis_date', 'age', 'dconsverbpa']
+        available_age_fields = [f for f in age_related_fields if f in df.columns]
+        if available_age_fields:
+            self.logger.info(f"Age-related fields available after preprocessing: {available_age_fields}")
+            for field in available_age_fields:
+                non_null = df[field].notna().sum()
+                self.logger.info(f"  {field}: {non_null}/{len(df)} non-null values")
+                if non_null > 0:
+                    sample_values = df[df[field].notna()][field].head(3).tolist()
+                    self.logger.info(f"    Sample values: {sample_values}")
         
         return df
     
@@ -1669,6 +1815,9 @@ class EntityMapper:
                     f"({has_age_before} → {has_age_after} records)"
                 )
         
+        # Log field population statistics for debugging
+        self._log_field_statistics(df)
+        
         return df
     
     def validate_mapped_data(self, mapped_df: pd.DataFrame) -> List[str]:
@@ -1906,6 +2055,43 @@ class EntityMapper:
             Empty DataFrame with correct column structure
         """
         return pd.DataFrame(columns=self.config.entity_fields)
+    
+    def _log_field_statistics(self, df: pd.DataFrame) -> None:
+        """
+        Log field population statistics for debugging.
+        
+        Shows which fields are populated and sample values to help diagnose issues.
+        
+        Args:
+            df: DataFrame to analyze
+        """
+        if df.empty:
+            return
+        
+        self.logger.info("=" * 60)
+        self.logger.info(f"Field Population Statistics ({self.config.entity_name})")
+        self.logger.info("=" * 60)
+        
+        # Show key fields that are often needed for debugging
+        key_fields = []
+        for field in ['submitter_participant_id', 'birth_date', 'diagnosis_date', 
+                      'age_at_phenotype', 'age_at_diagnosis', 'age_at_enrollment']:
+            if field in df.columns:
+                key_fields.append(field)
+        
+        for field in key_fields:
+            non_null = df[field].notna().sum()
+            total = len(df)
+            pct = (non_null / total * 100) if total > 0 else 0
+            
+            self.logger.info(f"  {field}: {non_null}/{total} ({pct:.1f}%) populated")
+            
+            # Show sample values for debugging
+            if non_null > 0:
+                sample_values = df[df[field].notna()][field].head(3).tolist()
+                self.logger.debug(f"    Sample values: {sample_values}")
+        
+        self.logger.info("=" * 60)
     
     def _log_summary(self):
         """Log mapping summary statistics."""

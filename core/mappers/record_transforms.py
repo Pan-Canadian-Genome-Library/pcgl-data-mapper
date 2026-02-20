@@ -150,6 +150,15 @@ def apply_age_to_record(
     event_offset = source_row.get(event_offset_field) if event_offset_field else None
     age_years = source_row.get(age_fallback_field) if age_fallback_field else None
     
+    # Debug logging for first few records to diagnose issues
+    if pd.isna(event_date):
+        logger.debug(
+            f"Age calculation for '{target_field}': "
+            f"birth_date_field='{birth_date_field}' (value={birth_date}), "
+            f"event_date_field='{event_date_field}' (value={event_date}), "
+            f"fallback_age_field='{age_fallback_field}' (value={age_years})"
+        )
+    
     # Calculate and set age
     age_days = calculate_age_in_days(
         birth_date=birth_date,
