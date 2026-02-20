@@ -155,7 +155,7 @@ configs:
   # =====================================================================
   - source_field: com_autoimm_rheum
     code: "MONDO:0007179"
-    term: "Autoimmune disease"
+    term: "autoimmune disease"
     source_label: "Autoimmune or rheumatologic disease (e.g., rheumatoid arthritis, systemic lupus erythematosus, multiple sclerosis, inflammaory bowel disease)"
   
   # =====================================================================
@@ -163,17 +163,17 @@ configs:
   # =====================================================================
   - source_field: com_diabetes
     code: "MONDO:0005015"
-    term: "Diabetes mellitus"
+    term: "diabetes mellitus"
     source_label: "Diabetes"
   
   - source_field: com_type_i_diabetes
     code: "MONDO:0005147"
-    term: "Type 1 diabetes mellitus"
+    term: "type 1 diabetes mellitus"
     source_label: "Type I diabetes"
   
   - source_field: com_type_ii_diabetes
     code: "MONDO:0005148"
-    term: "Type 2 diabetes mellitus"
+    term: "type 2 diabetes mellitus"
     source_label: "Type II diabetes"
   
   # =====================================================================
@@ -181,22 +181,22 @@ configs:
   # =====================================================================
   - source_field: com_asthma
     code: "MONDO:0004979"
-    term: "Asthma"
+    term: "asthma"
     source_label: "Asthma"
   
   - source_field: com_chronic_pulm
     code: "MONDO:0005002"
-    term: "Chronic obstructive pulmonary disease"
+    term: "chronic obstructive pulmonary disease"
     source_label: "Chronic obstructive pulmonary disease (COPD)"
   
   - source_field: com_cystic_fibrosis
     code: "MONDO:0009061"
-    term: "Cystic fibrosis"
+    term: "cystic fibrosis"
     source_label: "Cystic Fibrosis"
   
   - source_field: com_sleep_apnea
     code: "MONDO:0005296"
-    term: "Sleep apnea"
+    term: "sleep apnea syndrome"
     source_label: "Sleep Apnea"
     enrichments:
       - target_field: [comorbidity_treatment_status, comorbidity_note]
@@ -215,7 +215,7 @@ configs:
   # =====================================================================
   - source_field: com_chronic_kidney
     code: "MONDO:0005300"
-    term: "Chronic kidney disease"
+    term: "chronic kidney disease"
     source_label: "Chronic kidney disease"
   
   # =====================================================================
@@ -223,17 +223,17 @@ configs:
   # =====================================================================
   - source_field: com_liver
     code: "MONDO:0005154"
-    term: "Liver disorder"
+    term: "liver disorder"
     source_label: "Liver disease"
   
   - source_field: com_gallbl
     code: "MONDO:0005281"
-    term: "Gallbladder disorder"
+    term: "gallbladder disorder"
     source_label: "Gallbladder disease"
   
   - source_field: com_pancreas
     code: "MONDO:0002356"
-    term: "Pancreatic disorder"
+    term: "pancreas disorder"
     source_label: "Pancreatic disease"
   
   # =====================================================================
@@ -241,12 +241,12 @@ configs:
   # =====================================================================
   - source_field: com_gerd
     code: "MONDO:0007186"
-    term: "Gastroesophageal reflux disease"
+    term: "gastroesophageal reflux disease"
     source_label: "Gastroesophageal reflux disease (GERD)"
   
   - source_field: com_ibs
     code: "MONDO:0005052"
-    term: "Irritable bowel syndrome"
+    term: "irritable bowel syndrome"
     source_label: "Irritable Bowel Syndrome (IBS)"
   
   # =====================================================================
@@ -273,7 +273,7 @@ configs:
   
   - source_field: com_pcos
     code: "MONDO:0008487"
-    term: "Polycystic ovary syndrome"
+    term: "polycystic ovary syndrome"
     source_label: "Polycystic ovary syndrome (PCOS)"
     enrichments:
       - target_field: comorbidity_status
@@ -308,32 +308,29 @@ configs:
   
   - source_field: com_hypertension
     code: "MONDO:0005044"
-    term: "Hypertension"
+    term: "hypertensive disorder"
     source_label: "Hypertension"
   
   - source_field: com_mi
     code: "MONDO:0005068"
-    term: "Myocardial infarction"
+    term: "myocardial infarction"
     source_label: "Myocardial infarction"
-  
-  - source_field: com_infarction_type1
-    code: "MONDO:0005068"
-    term: "Type 1 myocardial infarction"
-    source_label: "Type 1 MI"
-  
-  - source_field: com_infarction_type2
-    code: "MONDO:0005068"
-    term: "Type 2 myocardial infarction"
-    source_label: "Type 2 MI"
+    enrichments:
+      - target_field: [comorbidity_code, comorbidity_term, comorbidity_source_text]
+        source_type: checkbox
+        create_records: true
+        value_mappings:
+          com_infarction_type1: ["MONDO:0005068", "Myocardial infarction", "Myocardial infarction Type I"]
+          com_infarction_type2: ["MONDO:0005068", "Myocardial infarction", "Myocardial infarction Type II"]
   
   - source_field: com_vascular
     code: "MONDO:0005294"
-    term: "Peripheral vascular disease"
+    term: "peripheral vascular disease"
     source_label: "Peripheral vascular disease"
   
   - source_field: com_stroke
     code: "MONDO:0005098"
-    term: "Stroke"
+    term: "stroke disorder"
     source_label: "Stroke"
   
   - source_field: com_arrythmias
@@ -346,7 +343,7 @@ configs:
   # =====================================================================
   - source_field: com_anemia
     code: "MONDO:0002280"
-    term: "Anemia"
+    term: "anemia"
     source_label: "Anemia"
   
   # =====================================================================
@@ -354,12 +351,12 @@ configs:
   # =====================================================================
   - source_field: com_dementia
     code: "MONDO:0001627"
-    term: "Dementia"
+    term: "dementia"
     source_label: "Dementia"
   
   - source_field: com_neurological
     code: "MONDO:0005071"
-    term: "Nervous system disorder"
+    term: "nervous system disorder"
     source_label: "Neurological or neuropsychiatric disease"
   
   # =====================================================================
@@ -367,7 +364,7 @@ configs:
   # =====================================================================
   - source_field: com_cancer
     code: "MONDO:0004992"
-    term: "Cancer"
+    term: "cancer"
     source_label: "Is the patient currently diagnosed with cancer?"
     enrichments:
       - target_field: age_at_comorbidity_diagnosis
@@ -441,7 +438,7 @@ configs:
   # =====================================================================
   - source_field: influenza
     code: "MONDO:0005812"
-    term: "Influenza"
+    term: "influenza"
     source_label: "Influenza"
     enrichments:
       - target_field: [comorbidity_status, comorbidity_note]
@@ -489,7 +486,7 @@ configs:
   
   - source_field: rsv
     code: "MONDO:0001577"
-    term: "Respiratory syncytial virus infectious disease"
+    term: "respiratory syncytial virus infectious disease"
     source_label: "RSV"
     enrichments:
       - target_field: [comorbidity_status, comorbidity_note]
@@ -572,7 +569,7 @@ configs:
   
   - source_field: pneumonia
     code: "MONDO:0005249"
-    term: "Pneumonia"
+    term: "pneumonia"
     source_label: "Pneumonia"
   
   # =====================================================================
@@ -580,7 +577,7 @@ configs:
   # =====================================================================
   - source_field: com_other
     code: "MONDO:0000001"
-    term: "Disease"
+    term: "disease"
     source_label: "Other comorbidity"
     enrichments:
       - target_field: comorbidity_status

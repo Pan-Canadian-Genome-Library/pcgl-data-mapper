@@ -389,7 +389,7 @@ configs:
   
   - source_field: menin_enceph
     code: "HP:0002383"
-    term: "Encephalitis"
+    term: "Infectious encephalitis"
     source_label: "Meningitis / Encephalitis"
   
   - source_field: comp_seizure
@@ -449,8 +449,8 @@ configs:
           cardiac_arrhyth_type___3: ["HP:0011675", "Arrhythmia", "Specify cardiac arrhythmia type (choice=Other)"]
   
   - source_field: cardiac_ischaemia
-    code: "HP:0033678"
-    term: "Acute coronary syndrome"
+    code: "HP:0001658"
+    term: "Myocardial infarction"
     source_label: "Cardiac ischaemia"
     enrichments:
       - target_field: phenotype_note
@@ -513,8 +513,8 @@ configs:
     source_label: "Hypoglycemia"
   
   - source_field: inflam_syndrom
-    code: "NCIT:C34825"
-    term: "Kawasaki Disease"
+    code: "HP:0012647"
+    term: "Abnormal inflammatory response"
     source_label: "Inflammatory syndrome/Kawasaki disease like"
   
   - source_field: comp_other

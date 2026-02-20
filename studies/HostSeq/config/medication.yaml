@@ -119,7 +119,7 @@ configs:
   # =====================================================================
   - source_field: antibiotic_azithro
     code: "rxnorm:18631"
-    term: "Azithromycin"
+    term: "azithromycin"
     source_label: "Azithromycin (Zithromax)"
   
   - source_field: antibiotic_other
@@ -147,10 +147,10 @@ configs:
         source_type: checkbox
         create_records: true
         value_mappings:
-          cort_type___1: [rxnorm:6902, "Methylprednisolone", "Specify corticosteroid type (choice=Methylprednisone)"]
-          cort_type___2: [rxnorm:8640, "Prednisone", "Specify corticosteroid type (choice=Prednisone)"]
-          cort_type___3: [rxnorm:8638, "Prednisolone", "Specify corticosteroid type (choice=Prednisolone)"]
-          cort_type___4: [rxnorm:5492, "Hydrocortisone", "Specify corticosteroid type (choice=Hydrocortisone)"]
+          cort_type___1: [rxnorm:6902, "methylprednisolone", "Specify corticosteroid type (choice=Methylprednisone)"]
+          cort_type___2: [rxnorm:8640, "prednisone", "Specify corticosteroid type (choice=Prednisone)"]
+          cort_type___3: [rxnorm:8638, "prednisolone", "Specify corticosteroid type (choice=Prednisolone)"]
+          cort_type___4: [rxnorm:5492, "hydrocortisone", "Specify corticosteroid type (choice=Hydrocortisone)"]
           cort_type___5: [NCIT:C2323, "Glucocorticoid", "Specify corticosteroid type (choice=Other)"]
         
         
@@ -167,7 +167,7 @@ configs:
   # =====================================================================
   - source_field: colchicine
     code: "rxnorm:2683"
-    term: "Colchicine"
+    term: "colchicine"
     source_label: "Colchicine"
   
   # =====================================================================
@@ -175,12 +175,12 @@ configs:
   # =====================================================================
   - source_field: chloroq
     code: "rxnorm:2393"
-    term: "Chloroquine"
+    term: "chloroquine"
     source_label: "Chloroquine (Aralen)"
   
   - source_field: hydroxychloroq
     code: "rxnorm:5521"
-    term: "Hydroxychloroquine"
+    term: "hydroxychloroquine"
     source_label: "Hydroxycholorquine"
   
   # =====================================================================
