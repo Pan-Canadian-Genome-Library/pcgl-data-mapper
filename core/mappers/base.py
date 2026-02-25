@@ -729,7 +729,7 @@ class EntityMapper:
                 year_field = params.get('year_field')
                 month_field = params.get('month_field')
                 day_field = params.get('day_field')
-                default_day = params.get('default_day', 15)
+                default_day = params.get('default_day', 1)
                 
                 if not year_field or not month_field:
                     continue
