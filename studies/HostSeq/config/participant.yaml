@@ -9,7 +9,7 @@
 entity:
   name: Participant
   source_files:
-    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+    primary: "HostSeqCRFHarmonized-PCGLTrans_DATA_2026-03-02_1241.csv"  # Main source file
 
   fields:
     base:
