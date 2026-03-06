@@ -28,10 +28,10 @@ def _format_context(context: Optional[Dict[str, Any]] = None) -> str:
     Format context information for log messages.
     
     Args:
-        context: Optional context dictionary with keys like 'participant_id', 'record_id', etc.
+        context: Optional context dictionary with keys like 'participant_id', 'record_id', 'target_field', etc.
         
     Returns:
-        Formatted context string (e.g., "[participant_id=P001]") or empty string
+        Formatted context string (e.g., "[participant_id=P001, target_field=age_at_diagnosis]") or empty string
     """
     if not context:
         return ""
@@ -41,6 +41,8 @@ def _format_context(context: Optional[Dict[str, Any]] = None) -> str:
         parts.append(f"participant_id={context['participant_id']}")
     if 'record_id' in context and context['record_id']:
         parts.append(f"record_id={context['record_id']}")
+    if 'target_field' in context and context['target_field']:
+        parts.append(f"target_field={context['target_field']}")
     
     return f"[{', '.join(parts)}] " if parts else ""
 
@@ -266,7 +268,8 @@ def parse_age_with_units(age_value: Optional[Union[str, int, float]], context: O
                 return int(age_years * 365.25)
             else:
                 ctx = _format_context(context)
-                logger.warning(f"{ctx}Age {age_years} years seems unreasonable")
+                source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+                logger.warning(f"{ctx}Age {age_years} years seems unreasonable{source_info}")
                 return None
         except (ValueError, TypeError):
             return None
@@ -393,7 +396,8 @@ def calculate_age_in_days(
             # Validate result
             if age_days < 0:
                 ctx = _format_context(context)
-                logger.warning(f"{ctx}Negative age calculated: {age_days} days (event before birth)")
+                source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+                logger.warning(f"{ctx}Negative age calculated: {age_days} days (event before birth){source_info}")
                 return None
             if age_days > 120 * 365.25:
                 ctx = _format_context(context)
@@ -403,7 +407,8 @@ def calculate_age_in_days(
                 
         except (ValueError, TypeError) as e:
             ctx = _format_context(context)
-            logger.debug(f"{ctx}Error calculating age from birth date: {e}")
+            source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+            logger.debug(f"{ctx}Error calculating age from birth date: {e}{source_info}")
             # Fall through to alternative method
     
     # Fallback method: use age with units parsing
@@ -413,12 +418,14 @@ def calculate_age_in_days(
           age_days = parse_age_with_units(age_years, context)
           if age_days is not None:
               ctx = _format_context(context)
-              logger.debug(f"{ctx}Used age fallback: {age_years} = {age_days} days")
+              source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+              logger.debug(f"{ctx}Used age fallback: {age_years} = {age_days} days{source_info}")
               return age_days
 
         except (ValueError, TypeError) as e:
             ctx = _format_context(context)
-            logger.debug(f"{ctx}Error using age fallback: {e}")
+            source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+            logger.debug(f"{ctx}Error using age fallback: {e}{source_info}")
     
     # Both methods failed
     return None

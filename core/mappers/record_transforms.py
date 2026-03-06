@@ -152,12 +152,28 @@ def apply_age_to_record(
     event_offset = source_row.get(event_offset_field) if event_offset_field else None
     age_years = source_row.get(age_fallback_field) if age_fallback_field else None
     
-    # Build context for better error messages (include participant ID if available)
-    context = None
+    # Build context for better error messages (include participant ID and field info)
+    context = {'target_field': target_field}
     if participant_id_field and participant_id_field in source_row.index:
         pid = source_row.get(participant_id_field)
         if pd.notna(pid):
-            context = {'participant_id': pid}
+            context['participant_id'] = pid
+    
+    # Add source field information for debugging (with values)
+    source_fields = []
+    if birth_date_field:
+        value_repr = f"'{birth_date}'" if pd.notna(birth_date) else "null"
+        source_fields.append(f"birth_date={birth_date_field}({value_repr})")
+    if event_date_field:
+        value_repr = f"'{event_date}'" if pd.notna(event_date) else "null"
+        source_fields.append(f"event_date={event_date_field}({value_repr})")
+    if event_offset_field:
+        value_repr = event_offset if pd.notna(event_offset) else "null"
+        source_fields.append(f"event_offset={event_offset_field}({value_repr})")
+    if age_fallback_field:
+        value_repr = age_years if pd.notna(age_years) else "null"
+        source_fields.append(f"age_fallback={age_fallback_field}({value_repr})")
+    context['source_fields'] = ', '.join(source_fields) if source_fields else 'none'
     
     # Calculate and set age
     age_days = calculate_age_in_days(
