@@ -67,6 +67,9 @@ preprocessing:
     params:
       year_field: dob_year
       month_field: dob_month
+      # method2: fallback to age calculation if birth date is missing
+      event_date_field: [enrollment_date, covid19_diagnosis_date, covid19_test_date, date_admission]
+      age_field: age
 
 mappings:
   # ---------------------------------------------------------------------------

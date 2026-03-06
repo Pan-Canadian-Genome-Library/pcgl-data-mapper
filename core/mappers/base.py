@@ -28,7 +28,9 @@ from .utils import (
     validate_participant_id,
     validate_age_in_days,
     read_data_file,
-    safe_int_conversion
+    safe_int_conversion,
+    parse_date,
+    parse_age_with_units
 )
 from .record_transforms import (
     apply_value_to_record,
@@ -452,9 +454,10 @@ class EntityMapper:
         row: pd.Series,
         df: pd.DataFrame,
         year_field: str,
-        month_field: str,
+        month_field: Optional[str],
         day_field: Optional[str],
-        default_day: int
+        default_day: int,
+        default_month: int = 1
     ) -> Optional[str]:
         """
         Construct date string from year/month/day components.
@@ -465,9 +468,10 @@ class EntityMapper:
             row: DataFrame row
             df: Full DataFrame (for column checks)
             year_field: Name of year field (required)
-            month_field: Name of month field (required)
+            month_field: Name of month field (optional)
             day_field: Name of day field (optional)
             default_day: Default day if not provided
+            default_month: Default month if not provided (default: 1 = January)
             
         Returns:
             Date string in YYYY-MM-DD format, or None if invalid
@@ -482,14 +486,18 @@ class EntityMapper:
         if not year_val:
             return None
         
-        # Month is required
-        month = row.get(month_field)
-        if pd.isna(month):
-            return None
+        # Get month (use default if not provided or field missing)
+        if month_field and month_field in df.columns:
+            month = row.get(month_field)
+            if pd.notna(month):
+                month_val = safe_int_conversion(month)
+            else:
+                month_val = default_month
+        else:
+            month_val = default_month
         
-        month_val = safe_int_conversion(month)
         if not month_val:
-            return None
+            month_val = default_month
         
         # Get day (use default if not provided or field missing)
         if day_field and day_field in df.columns:
@@ -512,6 +520,101 @@ class EntityMapper:
         
         # Format as YYYY-MM-DD
         return f"{year_val}-{month_val:02d}-{day_val:02d}"
+    
+    def _construct_date_from_age(
+        self,
+        row: pd.Series,
+        df: pd.DataFrame,
+        event_date_field: Any,
+        age_field: str,
+        participant_id_field: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Back-calculate birth date from event date and age.
+        
+        This is useful when birth date components are not available but we have
+        an event date (enrollment, diagnosis, etc.) and the person's age at that event.
+        
+        Formula: birth_date = event_date - age_in_days
+        
+        Args:
+            row: DataFrame row
+            df: Full DataFrame (for column checks)
+            event_date_field: Event date field name (string) or list of field names to try sequentially
+            age_field: Age field name (supports numeric years or strings like "24 months")
+            participant_id_field: Optional participant ID field name for logging context
+            
+        Returns:
+            Date string in YYYY-MM-DD format, or None if calculation not possible
+        """
+        from datetime import timedelta
+        
+        # Handle event_date_field as string or list
+        event_date_fields = event_date_field if isinstance(event_date_field, list) else [event_date_field]
+        
+        # Try each event date field sequentially
+        event_date_value = None
+        event_date_field_used = None
+        for field in event_date_fields:
+            if field in df.columns:
+                value = row.get(field)
+                if pd.notna(value):
+                    event_date_value = value
+                    event_date_field_used = field
+                    break
+        
+        if event_date_value is None:
+            return None
+        
+        # Get age value
+        if age_field not in df.columns:
+            return None
+        
+        age_value = row.get(age_field)
+        if pd.isna(age_value):
+            return None
+        
+        try:
+            # Parse event date
+            event_dt = parse_date(event_date_value, assume_mid_month=True)
+            if event_dt is None:
+                self.logger.debug(f"Could not parse event_date: {event_date_value} from field '{event_date_field_used}'")
+                return None
+            
+            # Parse age to days
+            age_days = parse_age_with_units(age_value)
+            if age_days is None:
+                self.logger.debug(f"Could not parse age: {age_value} from field '{age_field}'")
+                return None
+            
+            # Back-calculate birth date: birth_date = event_date - age_in_days
+            birth_dt = event_dt - timedelta(days=age_days)
+            
+            # Format as YYYY-MM-DD
+            birth_date_str = birth_dt.strftime('%Y-%m-%d')
+            
+            # Get participant_id for logging context
+            participant_id = None
+            if participant_id_field and participant_id_field in df.columns:
+                participant_id = row.get(participant_id_field)
+            
+            # Log with participant context if available
+            if participant_id and pd.notna(participant_id):
+                self.logger.debug(
+                    f"[participant_id={participant_id}] Calculated birth_date='{birth_date_str}' from "
+                    f"{event_date_field_used}='{event_date_value}' and {age_field}='{age_value}' ({age_days} days)"
+                )
+            else:
+                self.logger.debug(
+                    f"Calculated birth_date='{birth_date_str}' from "
+                    f"{event_date_field_used}='{event_date_value}' and {age_field}='{age_value}' ({age_days} days)"
+                )
+            
+            return birth_date_str
+            
+        except Exception as e:
+            self.logger.debug(f"Error calculating birth date from age: {e}")
+            return None
     
     def preprocess(self, source_df: pd.DataFrame, **kwargs) -> pd.DataFrame:
         """
@@ -719,31 +822,75 @@ class EntityMapper:
                     ) from e
             
             elif step_type == 'construct_date':
-                # Construct date from year/month/day components
+                # Construct date from year/month/day components OR back-calculate from event date + age
                 target = step.get('target')
                 params = step.get('params', {})
                 
                 if not target:
                     continue
                 
+                # Method 1: From year/month/day components (preferred)
                 year_field = params.get('year_field')
                 month_field = params.get('month_field')
                 day_field = params.get('day_field')
                 default_day = params.get('default_day', 1)
+                default_month = params.get('default_month', 1)
                 
-                if not year_field or not month_field:
+                # Method 2: From event date and age (fallback)
+                event_date_field = params.get('event_date_field')  # Can be string or list
+                age_field = params.get('age_field')
+                
+                # Need either components (at least year_field) OR event_date + age
+                has_components = year_field is not None
+                has_age_method = event_date_field and age_field
+                
+                if not has_components and not has_age_method:
+                    self.logger.warning(
+                        f"construct_date for '{target}': requires either year_field "
+                        f"or (event_date_field + age_field)"
+                    )
                     continue
                 
                 try:
-                    df[target] = df.apply(
-                        lambda row: self._construct_date_from_components(row, df, year_field, month_field, day_field, default_day),
-                        axis=1
-                    )
+                    def construct_date_row(row):
+                        # Try components method first (if configured)
+                        if has_components:
+                            date_str = self._construct_date_from_components(
+                                row, df, year_field, month_field, day_field, default_day, default_month
+                            )
+                            if date_str is not None:
+                                return date_str
+                        
+                        # Fallback to age-based calculation (if configured)
+                        if has_age_method:
+                            date_str = self._construct_date_from_age(
+                                row, df, event_date_field, age_field, participant_id_field
+                            )
+                            if date_str is not None:
+                                return date_str
+                        
+                        return None
                     
-                    fields_desc = [year_field, month_field]
-                    if day_field:
-                        fields_desc.append(day_field)
-                    self.logger.info(f"Constructed date field '{target}' from {', '.join(fields_desc)}")
+                    df[target] = df.apply(construct_date_row, axis=1)
+                    
+                    # Log which methods were used
+                    methods_used = []
+                    if has_components:
+                        fields_desc = [year_field] if year_field else []
+                        if month_field:
+                            fields_desc.append(month_field)
+                        if day_field:
+                            fields_desc.append(day_field)
+                        methods_used.append(f"components({', '.join(fields_desc)})")
+                    if has_age_method:
+                        event_desc = event_date_field if isinstance(event_date_field, str) else f"[{', '.join(event_date_field)}]"
+                        methods_used.append(f"age-based({event_desc}, {age_field})")
+                    
+                    non_null_count = df[target].notna().sum()
+                    self.logger.info(
+                        f"Constructed date field '{target}' using {' or '.join(methods_used)}: "
+                        f"{non_null_count}/{len(df)} records"
+                    )
                     
                 except Exception as e:
                     self.logger.error(f"Error constructing date field '{target}': {e}")
