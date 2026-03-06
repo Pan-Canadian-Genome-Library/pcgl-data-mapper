@@ -105,14 +105,11 @@ configs:
           1: ["Former", "Smoked 100 cigarettes but currently not smoking"]
           2: ["Current", "Smoked 100 cigarettes and currently smoking"]
           -1: ["Missing - Unknown", "Don't know"]
-      - target_field: exposure_amount
-        source_field: smoke_habit
-        target_type: integer
       - target_field: exposure_unit
         default_value: "cigarettes per day"
       - target_field: exposure_note
         target_type: note
-        source_field: [smoke_quit_years, tobacco_other]
+        source_field: [smoke_habit, smoke_quit_years, tobacco_other]
   
   - source_field: vaping
     code: "snomedct:722499006"
@@ -125,14 +122,11 @@ configs:
           0: "Never"
           1: "Current"
           -1: "Missing - Unknown"
-      - target_field: exposure_amount
-        source_field: vaping_amount
-        target_type: integer
       - target_field: exposure_unit
         default_value: "cartridges per week"
       - target_field: exposure_note
         target_type: note
-        source_field: [vaping_amount_other]
+        source_field: [vaping_amount, vaping_amount_other]
   
   - source_field: cannabis
     code: "snomedct:398705004"
@@ -145,14 +139,11 @@ configs:
           0: "Never"
           1: "Current"
           -1: "Missing - Unknown"
-      - target_field: exposure_amount
-        source_field: cannabis_amount
-        target_type: integer
       - target_field: exposure_unit
         default_value: "joints/bong per week"
       - target_field: exposure_note
         target_type: note
-        source_field: [cannabis_amount_other]
+        source_field: [cannabis_amount, cannabis_amount_other]
   
   # =====================================================================
   # COVID-19 Vaccine - Overall Vaccination Status
