@@ -1092,12 +1092,12 @@ class EntityMapper:
                 excluded_participants = participants_before - participants_after
                 if excluded_participants:
                     excluded_ids = sorted([str(x) for x in excluded_participants])
-                    # Limit display to avoid overwhelming logs (show first 20, indicate if more)
-                    if len(excluded_ids) <= 20:
+                    # Limit display to avoid overwhelming logs (show first 300, indicate if more)
+                    if len(excluded_ids) <= 300:
                         self.logger.warning(f"  Excluded participant IDs: {excluded_ids}")
                     else:
                         self.logger.warning(
-                            f"  Excluded {len(excluded_ids)} participants. First 20 IDs: {excluded_ids[:20]}"
+                            f"  Excluded {len(excluded_ids)} participants. First 300 IDs: {excluded_ids[:300]}"
                         )
         
         return df

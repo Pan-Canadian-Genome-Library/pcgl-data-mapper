@@ -297,7 +297,8 @@ def parse_age_with_units(age_value: Optional[Union[str, int, float]], context: O
                 value = float(value_str)
             except ValueError:
                 ctx = _format_context(context)
-                logger.warning(f"{ctx}Could not parse age value: {age_value}")
+                source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+                logger.warning(f"{ctx}Could not parse age value: {age_value}{source_info}")
                 return None
             
             # Convert to days based on unit
@@ -311,7 +312,8 @@ def parse_age_with_units(age_value: Optional[Union[str, int, float]], context: O
                 days = int(value)
             else:
                 ctx = _format_context(context)
-                logger.warning(f"{ctx}Unknown age unit: {unit}")
+                source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+                logger.warning(f"{ctx}Unknown age unit: {unit}{source_info}")
                 return None
             
             # Validate reasonable range
@@ -319,11 +321,13 @@ def parse_age_with_units(age_value: Optional[Union[str, int, float]], context: O
                 return days
             else:
                 ctx = _format_context(context)
-                logger.warning(f"{ctx}Calculated age {days} days ({days/365.25:.1f} years) seems unreasonable")
+                source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+                logger.warning(f"{ctx}Calculated age {days} days ({days/365.25:.1f} years) seems unreasonable{source_info}")
                 return None
         else:
             ctx = _format_context(context)
-            logger.warning(f"{ctx}Could not parse age format: {age_value}")
+            source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+            logger.warning(f"{ctx}Could not parse age format: {age_value}{source_info}")
             return None
     
     return None
