@@ -1025,6 +1025,12 @@ class EntityMapper:
         
         before_count = len(df)
         
+        # Track participant IDs before filtering (for logging excluded participants)
+        participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
+        participants_before = set()
+        if participant_id_field in df.columns:
+            participants_before = set(df[participant_id_field].dropna().unique())
+        
         # Apply filter based on operator (no .copy() needed in loop)
         if operator == 'equals':
             df = df[df[field] == value]
@@ -1079,6 +1085,20 @@ class EntityMapper:
                 f"{label}: {field} {operator} {value} "
                 f"({before_count} → {after_count}, excluded {excluded})"
             )
+            
+            # Log excluded participant IDs if participant_id_field is available
+            if participant_id_field in df.columns and participants_before:
+                participants_after = set(df[participant_id_field].dropna().unique())
+                excluded_participants = participants_before - participants_after
+                if excluded_participants:
+                    excluded_ids = sorted([str(x) for x in excluded_participants])
+                    # Limit display to avoid overwhelming logs (show first 20, indicate if more)
+                    if len(excluded_ids) <= 20:
+                        self.logger.warning(f"  Excluded participant IDs: {excluded_ids}")
+                    else:
+                        self.logger.warning(
+                            f"  Excluded {len(excluded_ids)} participants. First 20 IDs: {excluded_ids[:20]}"
+                        )
         
         return df
     
@@ -1511,14 +1531,16 @@ class EntityMapper:
             
             elif target_type == 'age':
                 params = field_config.get('params', {})
-                apply_age_to_record(record, target_field, source_row, params)
+                participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
+                apply_age_to_record(record, target_field, source_row, params, participant_id_field)
             
             elif target_type == 'note':
                 note_fields = field_config.get('source_field', [])
                 apply_note_to_record(record, target_field, source_row, note_fields)
             
             elif target_type == 'date':
-                apply_date_to_record(record, target_field, source_row, source_field)
+                participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
+                apply_date_to_record(record, target_field, source_row, source_field, participant_id_field)
             
             elif target_type == 'duration':
                 params = field_config.get('params', {})
@@ -1527,7 +1549,8 @@ class EntityMapper:
                 apply_duration_to_record(record, target_field, source_row, start_field, end_field)
             
             elif target_type == 'integer':
-                apply_integer_to_record(record, target_field, source_row, source_field, value_mappings, default_value, self.logger)
+                participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
+                apply_integer_to_record(record, target_field, source_row, source_field, value_mappings, default_value, self.logger, participant_id_field)
             
             else:  # direct, value
                 has_default = 'default_value' in field_config
@@ -1692,6 +1715,22 @@ class EntityMapper:
         """
         errors = []
         
+        # Get participant ID field for context in error messages
+        # Check mapped data for submitter_participant_id (PCGL schema field)
+        # Fall back to source field name if not found
+        participant_id_field = None
+        has_participant_id = False
+        
+        if 'submitter_participant_id' in mapped_df.columns:
+            participant_id_field = 'submitter_participant_id'
+            has_participant_id = True
+        else:
+            # Fall back to source field name from filters config
+            source_participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
+            if source_participant_id_field in mapped_df.columns:
+                participant_id_field = source_participant_id_field
+                has_participant_id = True
+        
         # Apply configured validations
         for validation in self.config.validations:
             validation_type = validation.get('type')
@@ -1700,34 +1739,79 @@ class EntityMapper:
             if validation_type == 'required':
                 # Check for required fields
                 if field in mapped_df.columns:
-                    null_count = mapped_df[field].isna().sum()
+                    null_rows = mapped_df[field].isna()
+                    null_count = null_rows.sum()
                     if null_count > 0:
-                        errors.append(f"Required field '{field}' has {null_count} null values")
+                        error_msg = f"Required field '{field}' has {null_count} null values"
+                        if has_participant_id:
+                            null_participant_ids = mapped_df.loc[null_rows, participant_id_field].dropna().unique()
+                            if len(null_participant_ids) > 0:
+                                ids_str = ', '.join([str(x) for x in sorted(null_participant_ids)[:10]])
+                                if len(null_participant_ids) > 10:
+                                    error_msg += f" (participant IDs: {ids_str}, ... and {len(null_participant_ids) - 10} more)"
+                                else:
+                                    error_msg += f" (participant IDs: {ids_str})"
+                        errors.append(error_msg)
             
             elif validation_type == 'participant_id':
                 # Validate participant IDs
                 if field in mapped_df.columns:
-                    invalid_ids = ~mapped_df[field].apply(validate_participant_id)
-                    if invalid_ids.any():
-                        errors.append(f"Field '{field}' has {invalid_ids.sum()} invalid participant IDs")
+                    invalid_mask = ~mapped_df[field].apply(validate_participant_id)
+                    invalid_count = invalid_mask.sum()
+                    if invalid_count > 0:
+                        error_msg = f"Field '{field}' has {invalid_count} invalid participant IDs"
+                        invalid_ids = mapped_df.loc[invalid_mask, field].unique()
+                        if len(invalid_ids) > 0:
+                            ids_str = ', '.join([str(x) for x in sorted(invalid_ids)[:10]])
+                            if len(invalid_ids) > 10:
+                                error_msg += f" ({ids_str}, ... and {len(invalid_ids) - 10} more)"
+                            else:
+                                error_msg += f" ({ids_str})"
+                        errors.append(error_msg)
             
             elif validation_type == 'age_range':
                 # Validate age is within range
                 if field in mapped_df.columns:
                     min_age = validation.get('min_age', 0)
                     max_age = validation.get('max_age', 120 * 365)
-                    invalid_ages = ~mapped_df[field].apply(
+                    invalid_mask = ~mapped_df[field].apply(
                         lambda x: validate_age_in_days(x, min_age, max_age)
                     )
-                    if invalid_ages.any():
-                        errors.append(f"Field '{field}' has {invalid_ages.sum()} ages outside valid range")
+                    invalid_count = invalid_mask.sum()
+                    if invalid_count > 0:
+                        error_msg = f"Field '{field}' has {invalid_count} ages outside valid range"
+                        if has_participant_id:
+                            invalid_participant_ids = mapped_df.loc[invalid_mask, participant_id_field].dropna().unique()
+                            if len(invalid_participant_ids) > 0:
+                                ids_str = ', '.join([str(x) for x in sorted(invalid_participant_ids)[:10]])
+                                if len(invalid_participant_ids) > 10:
+                                    error_msg += f" (participant IDs: {ids_str}, ... and {len(invalid_participant_ids) - 10} more)"
+                                else:
+                                    error_msg += f" (participant IDs: {ids_str})"
+                        errors.append(error_msg)
             
             elif validation_type == 'unique':
                 # Check for unique values
                 if field in mapped_df.columns:
-                    duplicates = mapped_df[field].duplicated().sum()
+                    duplicate_mask = mapped_df[field].duplicated(keep=False)  # Mark all duplicates, not just subsequent ones
+                    duplicates = duplicate_mask.sum()
                     if duplicates > 0:
-                        errors.append(f"Field '{field}' has {duplicates} duplicate values")
+                        # Get the unique duplicate values
+                        duplicate_values = mapped_df.loc[duplicate_mask, field].dropna().unique()
+                        values_str = ', '.join([f"'{x}'" for x in sorted(duplicate_values)[:10]])
+                        if len(duplicate_values) > 10:
+                            values_str += f", ... and {len(duplicate_values) - 10} more"
+                        
+                        error_msg = f"Field '{field}' has {duplicates} duplicate values: {values_str}"
+                        if has_participant_id:
+                            duplicate_participant_ids = mapped_df.loc[duplicate_mask, participant_id_field].dropna().unique()
+                            if len(duplicate_participant_ids) > 0:
+                                ids_str = ', '.join([str(x) for x in sorted(duplicate_participant_ids)[:10]])
+                                if len(duplicate_participant_ids) > 10:
+                                    error_msg += f" (participant IDs: {ids_str}, ... and {len(duplicate_participant_ids) - 10} more)"
+                                else:
+                                    error_msg += f" (participant IDs: {ids_str})"
+                        errors.append(error_msg)
         
         return errors
     

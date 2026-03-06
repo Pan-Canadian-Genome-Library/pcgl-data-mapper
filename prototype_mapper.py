@@ -51,7 +51,13 @@ def main():
     
     parser.add_argument('--output_dir', type=Path, help='Output directory for mapped files')
     parser.add_argument('--study_config_dir', type=Path, help='Root directory containing study configs (default: ./studies/)')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose debug logging')
     args = parser.parse_args()
+    
+    # Enable debug logging if verbose flag is set
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.debug("Verbose debug logging enabled")
     
     study_id = args.study_id
     input_csv_path = args.input_csv

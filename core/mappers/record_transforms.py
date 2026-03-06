@@ -125,7 +125,8 @@ def apply_age_to_record(
     record: Dict[str, Any],
     target_field: str,
     source_row: pd.Series,
-    age_params: Dict[str, Any]
+    age_params: Dict[str, Any],
+    participant_id_field: Optional[str] = None
 ) -> None:
     """
     Apply age calculation to a single record.
@@ -137,6 +138,7 @@ def apply_age_to_record(
         target_field: Target field name
         source_row: Source data row
         age_params: Age calculation parameters (birth_date_field, event_date_field, etc.)
+        participant_id_field: Optional field name for participant ID (for context in warnings)
     """
 
     # Get parameters
@@ -150,12 +152,20 @@ def apply_age_to_record(
     event_offset = source_row.get(event_offset_field) if event_offset_field else None
     age_years = source_row.get(age_fallback_field) if age_fallback_field else None
     
+    # Build context for better error messages (include participant ID if available)
+    context = None
+    if participant_id_field and participant_id_field in source_row.index:
+        pid = source_row.get(participant_id_field)
+        if pd.notna(pid):
+            context = {'participant_id': pid}
+    
     # Calculate and set age
     age_days = calculate_age_in_days(
         birth_date=birth_date,
         event_date=event_date,
         age_years=age_years,
-        event_offset_days=event_offset
+        event_offset_days=event_offset,
+        context=context
     )
     
     # Always set the field (can be None to explicitly null out a previously calculated value)
@@ -283,7 +293,8 @@ def apply_date_to_record(
     record: Dict[str, Any],
     target_field: str,
     source_row: pd.Series,
-    source_field: Optional[str]
+    source_field: Optional[str],
+    participant_id_field: Optional[str] = None
 ) -> None:
     """
     Apply date formatting to a single record.
@@ -295,11 +306,18 @@ def apply_date_to_record(
         target_field: Target field name
         source_row: Source data row
         source_field: Source field name
+        participant_id_field: Optional field name for participant ID (for context in warnings)
     """
     if source_field:
         date_value = source_row.get(source_field)
         if pd.notna(date_value):
-            record[target_field] = format_date_to_pcgl(date_value)
+            # Build context for better error messages
+            context = None
+            if participant_id_field and participant_id_field in source_row.index:
+                pid = source_row.get(participant_id_field)
+                if pd.notna(pid):
+                    context = {'participant_id': pid}
+            record[target_field] = format_date_to_pcgl(date_value, context=context)
 
 
 def apply_duration_to_record(
@@ -340,7 +358,8 @@ def apply_integer_to_record(
     source_field: Optional[str],
     value_mappings: Optional[Dict[Any, Any]] = None,
     default_value: Any = None,
-    logger_instance: Optional[logging.Logger] = None
+    logger_instance: Optional[logging.Logger] = None,
+    participant_id_field: Optional[str] = None
 ) -> None:
     """
     Apply integer conversion to a single record.
@@ -356,8 +375,20 @@ def apply_integer_to_record(
         value_mappings: Optional mapping dictionary (applied before integer conversion)
         default_value: Default value if source is None/missing
         logger_instance: Optional logger for warnings
+        participant_id_field: Optional field name for participant ID (for context in warnings)
     """
     log = logger_instance or logger
+    
+    # Build context for better error messages
+    context = None
+    if participant_id_field and participant_id_field in source_row.index:
+        pid = source_row.get(participant_id_field)
+        if pd.notna(pid):
+            context = {'participant_id': pid}
+    
+    # Import format context helper
+    from .utils import _format_context
+    ctx = _format_context(context)
     
     # Handle fields with no source (use default value)
     if source_field is None or source_field == 'null':
@@ -365,7 +396,7 @@ def apply_integer_to_record(
             try:
                 record[target_field] = int(float(default_value))
             except (ValueError, TypeError) as e:
-                log.warning(f"Cannot convert default value '{default_value}' to integer for {target_field}: {e}")
+                log.warning(f"{ctx}Cannot convert default value '{default_value}' to integer for {target_field}: {e}")
                 record[target_field] = None
         return
     
@@ -390,12 +421,12 @@ def apply_integer_to_record(
             # Convert to int (handles float, string, etc.)
             record[target_field] = int(float(value))
         except (ValueError, TypeError) as e:
-            log.warning(f"Cannot convert '{value}' to integer for {target_field}: {e}")
+            log.warning(f"{ctx}Cannot convert '{value}' to integer for {target_field}: {e}")
             record[target_field] = None
     elif default_value is not None:
         # Use default value if source is None/NaN
         try:
             record[target_field] = int(float(default_value))
         except (ValueError, TypeError) as e:
-            log.warning(f"Cannot convert default value '{default_value}' to integer for {target_field}: {e}")
+            log.warning(f"{ctx}Cannot convert default value '{default_value}' to integer for {target_field}: {e}")
             record[target_field] = None
