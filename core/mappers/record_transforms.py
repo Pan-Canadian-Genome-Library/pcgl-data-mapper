@@ -14,7 +14,7 @@ Date: 2026-01-07
 
 import pandas as pd
 import logging
-from typing import Dict, Any, Optional, List, Callable
+from typing import Dict, Any, Optional, List, Callable, Union
 from .utils import (
     format_date_to_pcgl,
     calculate_duration_in_days,
@@ -138,6 +138,7 @@ def apply_age_to_record(
         target_field: Target field name
         source_row: Source data row
         age_params: Age calculation parameters (birth_date_field, event_date_field, etc.)
+                   - event_date_field can be a single field name (str) or list of field names to try sequentially
         participant_id_field: Optional field name for participant ID (for context in warnings)
     """
 
@@ -148,7 +149,17 @@ def apply_age_to_record(
     age_fallback_field = age_params.get('age_fallback_field')
     
     birth_date = source_row.get(birth_date_field) if birth_date_field else None
-    event_date = source_row.get(event_date_field) if event_date_field else None
+    
+    # Handle event_date_field as single field or list of fields
+    event_date = None
+    if event_date_field:
+        if isinstance(event_date_field, list):
+            # List of fields - collect values from all fields
+            event_date = [source_row.get(field) for field in event_date_field]
+        else:
+            # Single field
+            event_date = source_row.get(event_date_field)
+    
     event_offset = source_row.get(event_offset_field) if event_offset_field else None
     age_years = source_row.get(age_fallback_field) if age_fallback_field else None
     
@@ -165,8 +176,18 @@ def apply_age_to_record(
         value_repr = f"'{birth_date}'" if pd.notna(birth_date) else "null"
         source_fields.append(f"birth_date={birth_date_field}({value_repr})")
     if event_date_field:
-        value_repr = f"'{event_date}'" if pd.notna(event_date) else "null"
-        source_fields.append(f"event_date={event_date_field}({value_repr})")
+        if isinstance(event_date_field, list):
+            # List of event date fields
+            event_date_parts = []
+            for i, field in enumerate(event_date_field):
+                value = event_date[i] if isinstance(event_date, list) and i < len(event_date) else None
+                value_repr = f"'{value}'" if pd.notna(value) else "null"
+                event_date_parts.append(f"{field}({value_repr})")
+            source_fields.append(f"event_date=[{', '.join(event_date_parts)}]")
+        else:
+            # Single event date field
+            value_repr = f"'{event_date}'" if pd.notna(event_date) else "null"
+            source_fields.append(f"event_date={event_date_field}({value_repr})")
     if event_offset_field:
         value_repr = event_offset if pd.notna(event_offset) else "null"
         source_fields.append(f"event_offset={event_offset_field}({value_repr})")
@@ -174,6 +195,13 @@ def apply_age_to_record(
         value_repr = age_years if pd.notna(age_years) else "null"
         source_fields.append(f"age_fallback={age_fallback_field}({value_repr})")
     context['source_fields'] = ', '.join(source_fields) if source_fields else 'none'
+    
+    # Add event date field names to context for better logging
+    if event_date_field:
+        if isinstance(event_date_field, list):
+            context['event_date_field_names'] = event_date_field
+        else:
+            context['event_date_field_names'] = [event_date_field]
     
     # Calculate and set age
     age_days = calculate_age_in_days(
@@ -309,30 +337,51 @@ def apply_date_to_record(
     record: Dict[str, Any],
     target_field: str,
     source_row: pd.Series,
-    source_field: Optional[str],
+    source_field: Optional[Union[str, List[str]]],
     participant_id_field: Optional[str] = None
 ) -> None:
     """
     Apply date formatting to a single record.
     
     Converts date values to PCGL standard format (YYYY-MM-DD).
+    If source_field is a list, tries each field sequentially and uses the first non-null, parseable date.
     
     Args:
         record: Record dictionary to update (modified in place)
         target_field: Target field name
         source_row: Source data row
-        source_field: Source field name
+        source_field: Source field name or list of field names to try sequentially
         participant_id_field: Optional field name for participant ID (for context in warnings)
     """
-    if source_field:
+    if not source_field:
+        return
+    
+    # Build context for better error messages
+    context = {'target_field': target_field}
+    if participant_id_field and participant_id_field in source_row.index:
+        pid = source_row.get(participant_id_field)
+        if pd.notna(pid):
+            context['participant_id'] = pid
+    
+    # Handle source_field as list - try each field sequentially
+    if isinstance(source_field, list):
+        for field_name in source_field:
+            date_value = source_row.get(field_name)
+            if pd.notna(date_value):
+                formatted_date = format_date_to_pcgl(date_value, context=context)
+                if formatted_date is not None:
+                    record[target_field] = formatted_date
+                    # Log which field was used
+                    from .utils import _format_context, logger
+                    ctx = _format_context(context)
+                    logger.debug(f"{ctx}Using date from field: {field_name}='{formatted_date}'")
+                    return
+        # No valid date found in any field
+        return
+    else:
+        # Single field
         date_value = source_row.get(source_field)
         if pd.notna(date_value):
-            # Build context for better error messages
-            context = None
-            if participant_id_field and participant_id_field in source_row.index:
-                pid = source_row.get(participant_id_field)
-                if pd.notna(pid):
-                    context = {'participant_id': pid}
             record[target_field] = format_date_to_pcgl(date_value, context=context)
 
 

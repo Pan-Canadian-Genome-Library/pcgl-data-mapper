@@ -130,13 +130,13 @@ mappings:
     source_label: "Source study enrollment date"
     params:
       birth_date_field: birth_date
-      event_date_field: enrollment_date
+      event_date_field: [enrollment_date, covid19_diagnosis_date, covid19_test_date, date_admission]
       age_fallback_field: age
   
   # ---------------------------------------------------------------------------
   # Collection Date
   # ---------------------------------------------------------------------------
-  - source_field: enrollment_date
+  - source_field: [enrollment_date, covid19_diagnosis_date, covid19_test_date, date_admission]
     target_field: sociodem_date_collection
     source_label: "Source study enrollment date"
     target_type: date
