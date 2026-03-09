@@ -29,6 +29,39 @@ entity:
     selection_type: checkbox
     skip_values: [0, -1]
 
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: "id_hostseq"
+  
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+      - field: dna_number
+        op: is_not_null
+            
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+
+  enrich:
+
 mappings:
   # ---------------------------------------------------------------------------
   # Medication Record Expansion
@@ -201,36 +234,6 @@ configs:
     term: "Intravenous Immunoglobulin Therapy"
     source_label: "IVIG"
 
-# =============================================================================
-# PREPROCESSING FILTERS
-# =============================================================================
-filters:
-  participant_id_field: "id_hostseq"
-  
-  participant:
-    filter:
-      # Must have consent
-      - field: consent
-        op: equals
-        value: 1
-      # AND one of these conditions:
-      # - Not suspected (covid19_suspected___0 = 0), OR
-      # - COVID test positive (covid19_test = 1) even if suspected
-      - any:
-          - field: covid19_suspected___0
-            op: equals
-            value: 0
-          - field: covid19_test
-            op: equals
-            value: 1
-            
-  rows:
-    - name: baseline
-      filter:
-        - field: redcap_repeat_instrument
-          op: is_null
-
-  enrich:
 
 # =============================================================================
 # VALIDATION RULES

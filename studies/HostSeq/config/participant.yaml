@@ -41,6 +41,8 @@ filters:
           - field: covid19_test
             op: equals
             value: 1
+      - field: dna_number
+        op: is_not_null
 
   rows:
     - name: baseline

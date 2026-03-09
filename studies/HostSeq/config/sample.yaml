@@ -20,6 +20,41 @@ entity:
       - sample_status
   pattern: direct
 
+# =============================================================================
+# PREPROCESSING FILTERS
+# =============================================================================
+filters:
+  participant_id_field: "id_hostseq"
+
+  participant:
+    filter:
+      # Must have consent
+      - field: consent
+        op: equals
+        value: 1
+      # AND one of these conditions:
+      # - Not suspected (covid19_suspected___0 = 0), OR
+      # - COVID test positive (covid19_test = 1) even if suspected
+      - any:
+          - field: covid19_suspected___0
+            op: equals
+            value: 0
+          - field: covid19_test
+            op: equals
+            value: 1
+      - field: dna_number
+        op: is_not_null
+
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+        - field: dna_number
+          op: is_not_null
+
+  enrich:
+
 mappings:
   # ---------------------------------------------------------------------------
   # Sample Identifier
@@ -66,38 +101,7 @@ mappings:
     source_label: null
     default_value: "Case"
 
-# =============================================================================
-# PREPROCESSING FILTERS
-# =============================================================================
-filters:
-  participant_id_field: "id_hostseq"
 
-  participant:
-    filter:
-      # Must have consent
-      - field: consent
-        op: equals
-        value: 1
-      # AND one of these conditions:
-      # - Not suspected (covid19_suspected___0 = 0), OR
-      # - COVID test positive (covid19_test = 1) even if suspected
-      - any:
-          - field: covid19_suspected___0
-            op: equals
-            value: 0
-          - field: covid19_test
-            op: equals
-            value: 1
-
-  rows:
-    - name: baseline
-      filter:
-        - field: redcap_repeat_instrument
-          op: is_null
-        - field: dna_number
-          op: is_not_null
-
-  enrich:
 
 # =============================================================================
 # VALIDATION RULES

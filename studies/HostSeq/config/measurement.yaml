@@ -52,12 +52,15 @@ filters:
           - field: covid19_test
             op: equals
             value: 1
+      - field: dna_number
+        op: is_not_null
   
   rows:
     - name: baseline
       filter:
         - field: redcap_repeat_instrument
           op: is_null
+
     - name: laboratory_results
       filter:
         - field: redcap_repeat_instrument
