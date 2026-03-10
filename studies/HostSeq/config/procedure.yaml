@@ -52,7 +52,10 @@ filters:
             value: 1
       - field: dna_number
         op: is_not_null
-            
+      - field: dna_number
+        op: not_equals
+        value: INPUT
+
   rows:
     - name: baseline
       filter:
