@@ -15,6 +15,8 @@ import glob
 import sys
 import tempfile
 import shutil
+import time
+import json
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
@@ -264,7 +266,7 @@ def check_submission_status(
         True if status is valid
         
     Raises:
-        ValueError: If status is INVALID with errors
+        ValueError: If status is INVALID or unexpected state
     """
     stage_msg = "Validating" if stage == 'validation' else "Verifying committed"
     print(f"{stage_msg} submission: {submission_id}")
@@ -277,6 +279,14 @@ def check_submission_status(
         errors = parse_validation_errors(response.json())
         stage_error = "Validation" if stage == 'validation' else "Commit"
         raise ValueError(f"{stage_error} failed with errors:\n" + "\n".join(errors))
+    
+    # If checking validation stage but submission is already committed, this is an error
+    if stage == 'validation' and status == 'COMMITTED':
+        raise ValueError(
+            f"Submission {submission_id} is already COMMITTED. "
+            "This may indicate the batch was previously submitted. "
+            "Check submission state file or use --resume to skip completed batches."
+        )
     
     success_msg = "Validation successful" if stage == 'validation' else "Data successfully committed to database"
     print(success_msg)
@@ -300,11 +310,17 @@ def commit_clinical(
         
     Returns:
         True if commit successful
+        
+    Raises:
+        ValueError: If commit request fails
     """
     print(f"Committing submission to database: {submission_id}")
-    api_request('POST', f"{clinical_url}/submission/category/{category_id}/commit/{submission_id}", token, timeout=60)
-    print("Submission committed successfully")
-    return True
+    try:
+        api_request('POST', f"{clinical_url}/submission/category/{category_id}/commit/{submission_id}", token, timeout=60)
+        print("Submission committed successfully")
+        return True
+    except ValueError as e:
+        raise ValueError(f"Failed to commit submission {submission_id}: {e}")
 
 
 def split_entity_into_batches(
@@ -366,6 +382,37 @@ def split_entity_into_batches(
         print(f"  Batch {i+1}/{num_batches}: {len(batch_df)} records -> {batch_dir}")
     
     return batch_dirs
+
+
+def save_submission_state(
+    state_file: str,
+    batch_states: Dict[str, Dict]
+) -> None:
+    """
+    Save submission state to JSON file for resumability.
+    
+    Args:
+        state_file: Path to state file
+        batch_states: Dictionary mapping batch_dir -> {status, submission_id, error}
+    """
+    with open(state_file, 'w') as f:
+        json.dump(batch_states, f, indent=2)
+
+
+def load_submission_state(state_file: str) -> Dict[str, Dict]:
+    """
+    Load submission state from JSON file.
+    
+    Args:
+        state_file: Path to state file
+        
+    Returns:
+        Dictionary of batch states or empty dict if file doesn't exist
+    """
+    if os.path.exists(state_file):
+        with open(state_file, 'r') as f:
+            return json.load(f)
+    return {}
 
 
 def main(args):
@@ -443,10 +490,31 @@ def main(args):
         log_lines.append(f"Total batches: {len(batch_dirs)}")
         log_lines.append("")
         
-        # Step 5: Submit each batch
+        # Step 5: Setup state tracking for resumability
+        state_file = os.path.join(submission_dir, f"{args.entity}_submission_state.json")
+        batch_states = load_submission_state(state_file) if args.resume else {}
+        
+        # Step 6: Submit each batch
         submission_ids = []
         
         for batch_idx, batch_dir in enumerate(batch_dirs, 1):
+            # Check if batch was already successfully completed
+            if args.resume and batch_dir in batch_states:
+                batch_state = batch_states[batch_dir]
+                if batch_state.get('status') == 'completed':
+                    print(f"\n[RESUME] Batch {batch_idx}/{len(batch_dirs)}: Already completed (Submission ID: {batch_state.get('submission_id')})")
+                    submission_ids.append(batch_state.get('submission_id'))
+                    log_lines.append(f"\nBatch {batch_idx}/{len(batch_dirs)}: [RESUMED - Already completed]")
+                    log_lines.append(f"Submission ID: {batch_state.get('submission_id')}")
+                    continue
+                elif batch_state.get('status') == 'failed':
+                    print(f"\n[RESUME] Batch {batch_idx}/{len(batch_dirs)}: Previously failed, retrying...")
+                    log_lines.append(f"\nBatch {batch_idx}/{len(batch_dirs)}: [RETRY - Previously failed]")
+            
+            # Add delay between batches (skip for first batch)
+            if batch_idx > 1 and not args.dry_run:
+                print(f"\nWaiting 5 seconds before next batch...")
+                time.sleep(5)
             if len(batch_dirs) > 1:
                 print(f"\nBatch {batch_idx}/{len(batch_dirs)}:")
                 log_lines.append(f"\nBatch {batch_idx}/{len(batch_dirs)}:")
@@ -469,24 +537,54 @@ def main(args):
                 log_lines.append("[DRY RUN] Would validate, commit, and verify")
             else:
                 # Actual submission
-                submission_id = submit_clinical(args.clinical_url, category_id, args.study_id, batch_dir, args.token)
-                submission_ids.append(submission_id)
-                log_lines.append(f"Submission ID: {submission_id}")
-                
-                # Validate submission
-                check_submission_status(args.clinical_url, submission_id, args.token, 'validation')
-                log_lines.append("Status: Validated")
-                
-                # Commit to database
-                commit_clinical(args.clinical_url, category_id, submission_id, args.token)
-                log_lines.append("Status: Committed")
-                
-                # Verify final status
-                check_submission_status(args.clinical_url, submission_id, args.token, 'commit')
-                log_lines.append("Status: Verified")
-                
-                print(f"✓ Batch {batch_idx} completed (Submission ID: {submission_id})")
-                log_lines.append(f"✓ Batch {batch_idx} completed")
+                try:
+                    submission_id = submit_clinical(args.clinical_url, category_id, args.study_id, batch_dir, args.token)
+                    submission_ids.append(submission_id)
+                    log_lines.append(f"Submission ID: {submission_id}")
+                    
+                    # Save state: submitted
+                    batch_states[batch_dir] = {'status': 'submitted', 'submission_id': submission_id}
+                    save_submission_state(state_file, batch_states)
+                    
+                    # Validate submission
+                    check_submission_status(args.clinical_url, submission_id, args.token, 'validation')
+                    log_lines.append("Status: Validated")
+                    
+                    # Save state: validated
+                    batch_states[batch_dir]['status'] = 'validated'
+                    save_submission_state(state_file, batch_states)
+                    
+                    # Commit to database
+                    commit_clinical(args.clinical_url, category_id, submission_id, args.token)
+                    log_lines.append("Status: Committed")
+                    
+                    # Verify final status
+                    check_submission_status(args.clinical_url, submission_id, args.token, 'commit')
+                    log_lines.append("Status: Verified")
+                    
+                    # Save state: completed
+                    batch_states[batch_dir]['status'] = 'completed'
+                    save_submission_state(state_file, batch_states)
+                    
+                    print(f"✓ Batch {batch_idx} completed (Submission ID: {submission_id})")
+                    log_lines.append(f"✓ Batch {batch_idx} completed")
+                    
+                except ValueError as e:
+                    # Save state: failed
+                    error_msg = str(e)
+                    batch_states[batch_dir] = {
+                        'status': 'failed',
+                        'submission_id': submission_ids[-1] if submission_ids else None,
+                        'error': error_msg
+                    }
+                    save_submission_state(state_file, batch_states)
+                    
+                    print(f"✗ Batch {batch_idx} failed: {error_msg}")
+                    log_lines.append(f"✗ Batch {batch_idx} failed")
+                    log_lines.append(f"Error: {error_msg}")
+                    
+                    # Re-raise to stop processing remaining batches
+                    raise
         
         print("\n" + "=" * 80)
         log_lines.append("\n" + "=" * 80)
@@ -517,26 +615,45 @@ def main(args):
         print("=" * 80)
         log_lines.append("=" * 80)
         
-        # Write log file
-        log_file = os.path.join(submission_dir, f"{args.entity}_submission.log")
-        with open(log_file, 'w') as f:
-            f.write('\n'.join(log_lines))
-        print(f"\nLog file saved to: {log_file}")
-        
     except ValueError as e:
+        log_lines.append("\n" + "=" * 80)
+        log_lines.append("SUBMISSION FAILED")
+        log_lines.append("=" * 80)
+        log_lines.append(str(e))
+        log_lines.append("=" * 80)
+        
         print("\n" + "=" * 80)
         print("SUBMISSION FAILED")
         print("=" * 80)
         print(str(e))
         print("=" * 80)
-        sys.exit(1)
+        
     except Exception as e:
+        log_lines.append("\n" + "=" * 80)
+        log_lines.append("UNEXPECTED ERROR")
+        log_lines.append("=" * 80)
+        log_lines.append(f"Error: {e}")
+        log_lines.append("=" * 80)
+        
         print("\n" + "=" * 80)
         print("UNEXPECTED ERROR")
         print("=" * 80)
         print(f"Error: {e}")
         print("=" * 80)
-        sys.exit(1)
+        
+    finally:
+        # Always write log file, even on failure
+        log_file = os.path.join(submission_dir, f"{args.entity}_submission.log")
+        try:
+            with open(log_file, 'w') as f:
+                f.write('\n'.join(log_lines))
+            print(f"\nLog file saved to: {log_file}")
+        except Exception as log_error:
+            print(f"\nWarning: Failed to write log file: {log_error}")
+        
+        # Exit with error code if there was a failure
+        if 'e' in locals():
+            sys.exit(1)
 
 
 if __name__ == "__main__":
@@ -570,6 +687,7 @@ Examples:
     parser.add_argument("-id", "--input-directory", dest="input_directory", required=False, default="./", help="Directory containing CSV files to submit (default: current directory)")
     parser.add_argument("-bs", "--batch-size", dest="batch_size", type=int, default=200, help="Maximum number of records per batch (default: 200)")
     parser.add_argument("-dr", "--dry-run", dest="dry_run", action="store_true", help="Dry run mode: check files, split into batches, but don't submit data")
+    parser.add_argument("-r", "--resume", dest="resume", action="store_true", help="Resume mode: skip already completed batches based on saved state file")
     
     args = parser.parse_args()
     main(args)
