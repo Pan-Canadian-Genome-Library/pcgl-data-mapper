@@ -10,10 +10,10 @@ entity:
   name: Specimen
 
   source_files:
-    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+    primary: "HostSeqCRFHarmonized-PCGLTrans_DATA_2026-03-02_1241.csv"  # Main source file
     secondary:
-      - file: "specimen_tissue_source.tsv"
-        join_on: id_hostseq
+      - file: "HostseqSalivaSamples.csv"
+        join_on: [id_hostseq, dna_number]
         join_type: left
 
   fields:
@@ -36,7 +36,10 @@ preprocessing:
     params:
       year_field: dob_year
       month_field: dob_month
-
+      # method2: fallback to age calculation if birth date is missing
+      event_date_field: [enrollment_date, covid19_diagnosis_date, covid19_test_date, date_admission]
+      age_field: age
+      
 # =============================================================================
 # PREPROCESSING FILTERS
 # =============================================================================
@@ -59,6 +62,11 @@ filters:
           - field: covid19_test
             op: equals
             value: 1
+      - field: dna_number
+        op: is_not_null
+      - field: dna_number
+        op: not_equals
+        value: INPUT
 
   rows:
     - name: baseline

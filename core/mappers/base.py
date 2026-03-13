@@ -28,7 +28,9 @@ from .utils import (
     validate_participant_id,
     validate_age_in_days,
     read_data_file,
-    safe_int_conversion
+    safe_int_conversion,
+    parse_date,
+    parse_age_with_units
 )
 from .record_transforms import (
     apply_value_to_record,
@@ -452,9 +454,10 @@ class EntityMapper:
         row: pd.Series,
         df: pd.DataFrame,
         year_field: str,
-        month_field: str,
+        month_field: Optional[str],
         day_field: Optional[str],
-        default_day: int
+        default_day: int,
+        default_month: int = 1
     ) -> Optional[str]:
         """
         Construct date string from year/month/day components.
@@ -465,9 +468,10 @@ class EntityMapper:
             row: DataFrame row
             df: Full DataFrame (for column checks)
             year_field: Name of year field (required)
-            month_field: Name of month field (required)
+            month_field: Name of month field (optional)
             day_field: Name of day field (optional)
             default_day: Default day if not provided
+            default_month: Default month if not provided (default: 1 = January)
             
         Returns:
             Date string in YYYY-MM-DD format, or None if invalid
@@ -482,14 +486,18 @@ class EntityMapper:
         if not year_val:
             return None
         
-        # Month is required
-        month = row.get(month_field)
-        if pd.isna(month):
-            return None
+        # Get month (use default if not provided or field missing)
+        if month_field and month_field in df.columns:
+            month = row.get(month_field)
+            if pd.notna(month):
+                month_val = safe_int_conversion(month)
+            else:
+                month_val = default_month
+        else:
+            month_val = default_month
         
-        month_val = safe_int_conversion(month)
         if not month_val:
-            return None
+            month_val = default_month
         
         # Get day (use default if not provided or field missing)
         if day_field and day_field in df.columns:
@@ -557,6 +565,100 @@ class EntityMapper:
                 return str(date_val)
         
         return None
+    def _construct_date_from_age(
+        self,
+        row: pd.Series,
+        df: pd.DataFrame,
+        event_date_field: Any,
+        age_field: str,
+        participant_id_field: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Back-calculate birth date from event date and age.
+        
+        This is useful when birth date components are not available but we have
+        an event date (enrollment, diagnosis, etc.) and the person's age at that event.
+        
+        Formula: birth_date = event_date - age_in_days
+        
+        Args:
+            row: DataFrame row
+            df: Full DataFrame (for column checks)
+            event_date_field: Event date field name (string) or list of field names to try sequentially
+            age_field: Age field name (supports numeric years or strings like "24 months")
+            participant_id_field: Optional participant ID field name for logging context
+            
+        Returns:
+            Date string in YYYY-MM-DD format, or None if calculation not possible
+        """
+        from datetime import timedelta
+        
+        # Handle event_date_field as string or list
+        event_date_fields = event_date_field if isinstance(event_date_field, list) else [event_date_field]
+        
+        # Try each event date field sequentially
+        event_date_value = None
+        event_date_field_used = None
+        for field in event_date_fields:
+            if field in df.columns:
+                value = row.get(field)
+                if pd.notna(value):
+                    event_date_value = value
+                    event_date_field_used = field
+                    break
+        
+        if event_date_value is None:
+            return None
+        
+        # Get age value
+        if age_field not in df.columns:
+            return None
+        
+        age_value = row.get(age_field)
+        if pd.isna(age_value):
+            return None
+        
+        try:
+            # Parse event date
+            event_dt = parse_date(event_date_value, assume_mid_month=True)
+            if event_dt is None:
+                self.logger.debug(f"Could not parse event_date: {event_date_value} from field '{event_date_field_used}'")
+                return None
+            
+            # Parse age to days
+            age_days = parse_age_with_units(age_value)
+            if age_days is None:
+                self.logger.debug(f"Could not parse age: {age_value} from field '{age_field}'")
+                return None
+            
+            # Back-calculate birth date: birth_date = event_date - age_in_days
+            birth_dt = event_dt - timedelta(days=age_days)
+            
+            # Format as YYYY-MM-DD
+            birth_date_str = birth_dt.strftime('%Y-%m-%d')
+            
+            # Get participant_id for logging context
+            participant_id = None
+            if participant_id_field and participant_id_field in df.columns:
+                participant_id = row.get(participant_id_field)
+            
+            # Log with participant context if available
+            if participant_id and pd.notna(participant_id):
+                self.logger.debug(
+                    f"[participant_id={participant_id}] Calculated birth_date='{birth_date_str}' from "
+                    f"{event_date_field_used}='{event_date_value}' and {age_field}='{age_value}' ({age_days} days)"
+                )
+            else:
+                self.logger.debug(
+                    f"Calculated birth_date='{birth_date_str}' from "
+                    f"{event_date_field_used}='{event_date_value}' and {age_field}='{age_value}' ({age_days} days)"
+                )
+            
+            return birth_date_str
+            
+        except Exception as e:
+            self.logger.debug(f"Error calculating birth date from age: {e}")
+            return None
     
     def preprocess(self, source_df: pd.DataFrame, **kwargs) -> pd.DataFrame:
         """
@@ -764,44 +866,75 @@ class EntityMapper:
                     ) from e
             
             elif step_type == 'construct_date':
-                # Construct date from year/month/day components
+                # Construct date from year/month/day components OR back-calculate from event date + age
                 target = step.get('target')
                 params = step.get('params', {})
                 
                 if not target:
                     continue
                 
+                # Method 1: From year/month/day components (preferred)
                 year_field = params.get('year_field')
                 month_field = params.get('month_field')
                 day_field = params.get('day_field')
-                default_day = params.get('default_day', 15)
+                default_day = params.get('default_day', 1)
+                default_month = params.get('default_month', 1)
                 
-                if not year_field or not month_field:
+                # Method 2: From event date and age (fallback)
+                event_date_field = params.get('event_date_field')  # Can be string or list
+                age_field = params.get('age_field')
+                
+                # Need either components (at least year_field) OR event_date + age
+                has_components = year_field is not None
+                has_age_method = event_date_field and age_field
+                
+                if not has_components and not has_age_method:
+                    self.logger.warning(
+                        f"construct_date for '{target}': requires either year_field "
+                        f"or (event_date_field + age_field)"
+                    )
                     continue
                 
                 try:
-                    df[target] = df.apply(
-                        lambda row: self._construct_date_from_components(row, df, year_field, month_field, day_field, default_day),
-                        axis=1
-                    )
+                    def construct_date_row(row):
+                        # Try components method first (if configured)
+                        if has_components:
+                            date_str = self._construct_date_from_components(
+                                row, df, year_field, month_field, day_field, default_day, default_month
+                            )
+                            if date_str is not None:
+                                return date_str
+                        
+                        # Fallback to age-based calculation (if configured)
+                        if has_age_method:
+                            date_str = self._construct_date_from_age(
+                                row, df, event_date_field, age_field, participant_id_field
+                            )
+                            if date_str is not None:
+                                return date_str
+                        
+                        return None
                     
-                    fields_desc = [year_field, month_field]
-                    if day_field:
-                        fields_desc.append(day_field)
+                    df[target] = df.apply(construct_date_row, axis=1)
                     
-                    # Debug info: show sample values
-                    valid_dates = df[target].notna().sum()
-                    total_rows = len(df)
+                    # Log which methods were used
+                    methods_used = []
+                    if has_components:
+                        fields_desc = [year_field] if year_field else []
+                        if month_field:
+                            fields_desc.append(month_field)
+                        if day_field:
+                            fields_desc.append(day_field)
+                        methods_used.append(f"components({', '.join(fields_desc)})")
+                    if has_age_method:
+                        event_desc = event_date_field if isinstance(event_date_field, str) else f"[{', '.join(event_date_field)}]"
+                        methods_used.append(f"age-based({event_desc}, {age_field})")
+                    
+                    non_null_count = df[target].notna().sum()
                     self.logger.info(
-                        f"Constructed date field '{target}' from {', '.join(fields_desc)}: "
-                        f"{valid_dates}/{total_rows} valid dates"
+                        f"Constructed date field '{target}' using {' or '.join(methods_used)}: "
+                        f"{non_null_count}/{len(df)} records"
                     )
-                    
-                    # Show first few examples for debugging
-                    sample_df = df[[year_field, month_field, target]].head(3)
-                    if day_field and day_field in df.columns:
-                        sample_df = df[[year_field, month_field, day_field, target]].head(3)
-                    self.logger.debug(f"Sample {target} values:\n{sample_df.to_string()}")
                     
                 except Exception as e:
                     self.logger.error(f"Error constructing date field '{target}': {e}")
@@ -1171,6 +1304,12 @@ class EntityMapper:
         
         before_count = len(df)
         
+        # Track participant IDs before filtering (for logging excluded participants)
+        participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
+        participants_before = set()
+        if participant_id_field in df.columns:
+            participants_before = set(df[participant_id_field].dropna().unique())
+        
         # Apply filter based on operator (no .copy() needed in loop)
         if operator == 'equals':
             df = df[df[field] == value]
@@ -1225,6 +1364,20 @@ class EntityMapper:
                 f"{label}: {field} {operator} {value} "
                 f"({before_count} → {after_count}, excluded {excluded})"
             )
+            
+            # Log excluded participant IDs if participant_id_field is available
+            if participant_id_field in df.columns and participants_before:
+                participants_after = set(df[participant_id_field].dropna().unique())
+                excluded_participants = participants_before - participants_after
+                if excluded_participants:
+                    excluded_ids = sorted([str(x) for x in excluded_participants])
+                    # Limit display to avoid overwhelming logs (show first 300, indicate if more)
+                    if len(excluded_ids) <= 300:
+                        self.logger.warning(f"  Excluded participant IDs: {excluded_ids}")
+                    else:
+                        self.logger.warning(
+                            f"  Excluded {len(excluded_ids)} participants. First 300 IDs: {excluded_ids[:300]}"
+                        )
         
         return df
     
@@ -1657,14 +1810,16 @@ class EntityMapper:
             
             elif target_type == 'age':
                 params = field_config.get('params', {})
-                apply_age_to_record(record, target_field, source_row, params)
+                participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
+                apply_age_to_record(record, target_field, source_row, params, participant_id_field)
             
             elif target_type == 'note':
                 note_fields = field_config.get('source_field', [])
                 apply_note_to_record(record, target_field, source_row, note_fields)
             
             elif target_type == 'date':
-                apply_date_to_record(record, target_field, source_row, source_field)
+                participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
+                apply_date_to_record(record, target_field, source_row, source_field, participant_id_field)
             
             elif target_type == 'duration':
                 params = field_config.get('params', {})
@@ -1673,7 +1828,8 @@ class EntityMapper:
                 apply_duration_to_record(record, target_field, source_row, start_field, end_field)
             
             elif target_type == 'integer':
-                apply_integer_to_record(record, target_field, source_row, source_field, value_mappings, default_value, self.logger)
+                participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
+                apply_integer_to_record(record, target_field, source_row, source_field, value_mappings, default_value, self.logger, participant_id_field)
             
             else:  # direct, value
                 has_default = 'default_value' in field_config
@@ -1841,6 +1997,22 @@ class EntityMapper:
         """
         errors = []
         
+        # Get participant ID field for context in error messages
+        # Check mapped data for submitter_participant_id (PCGL schema field)
+        # Fall back to source field name if not found
+        participant_id_field = None
+        has_participant_id = False
+        
+        if 'submitter_participant_id' in mapped_df.columns:
+            participant_id_field = 'submitter_participant_id'
+            has_participant_id = True
+        else:
+            # Fall back to source field name from filters config
+            source_participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
+            if source_participant_id_field in mapped_df.columns:
+                participant_id_field = source_participant_id_field
+                has_participant_id = True
+        
         # Apply configured validations
         for validation in self.config.validations:
             validation_type = validation.get('type')
@@ -1849,34 +2021,79 @@ class EntityMapper:
             if validation_type == 'required':
                 # Check for required fields
                 if field in mapped_df.columns:
-                    null_count = mapped_df[field].isna().sum()
+                    null_rows = mapped_df[field].isna()
+                    null_count = null_rows.sum()
                     if null_count > 0:
-                        errors.append(f"Required field '{field}' has {null_count} null values")
+                        error_msg = f"Required field '{field}' has {null_count} null values"
+                        if has_participant_id:
+                            null_participant_ids = mapped_df.loc[null_rows, participant_id_field].dropna().unique()
+                            if len(null_participant_ids) > 0:
+                                ids_str = ', '.join([str(x) for x in sorted(null_participant_ids)[:10]])
+                                if len(null_participant_ids) > 10:
+                                    error_msg += f" (participant IDs: {ids_str}, ... and {len(null_participant_ids) - 10} more)"
+                                else:
+                                    error_msg += f" (participant IDs: {ids_str})"
+                        errors.append(error_msg)
             
             elif validation_type == 'participant_id':
                 # Validate participant IDs
                 if field in mapped_df.columns:
-                    invalid_ids = ~mapped_df[field].apply(validate_participant_id)
-                    if invalid_ids.any():
-                        errors.append(f"Field '{field}' has {invalid_ids.sum()} invalid participant IDs")
+                    invalid_mask = ~mapped_df[field].apply(validate_participant_id)
+                    invalid_count = invalid_mask.sum()
+                    if invalid_count > 0:
+                        error_msg = f"Field '{field}' has {invalid_count} invalid participant IDs"
+                        invalid_ids = mapped_df.loc[invalid_mask, field].unique()
+                        if len(invalid_ids) > 0:
+                            ids_str = ', '.join([str(x) for x in sorted(invalid_ids)[:10]])
+                            if len(invalid_ids) > 10:
+                                error_msg += f" ({ids_str}, ... and {len(invalid_ids) - 10} more)"
+                            else:
+                                error_msg += f" ({ids_str})"
+                        errors.append(error_msg)
             
             elif validation_type == 'age_range':
                 # Validate age is within range
                 if field in mapped_df.columns:
                     min_age = validation.get('min_age', 0)
                     max_age = validation.get('max_age', 120 * 365)
-                    invalid_ages = ~mapped_df[field].apply(
+                    invalid_mask = ~mapped_df[field].apply(
                         lambda x: validate_age_in_days(x, min_age, max_age)
                     )
-                    if invalid_ages.any():
-                        errors.append(f"Field '{field}' has {invalid_ages.sum()} ages outside valid range")
+                    invalid_count = invalid_mask.sum()
+                    if invalid_count > 0:
+                        error_msg = f"Field '{field}' has {invalid_count} ages outside valid range"
+                        if has_participant_id:
+                            invalid_participant_ids = mapped_df.loc[invalid_mask, participant_id_field].dropna().unique()
+                            if len(invalid_participant_ids) > 0:
+                                ids_str = ', '.join([str(x) for x in sorted(invalid_participant_ids)[:10]])
+                                if len(invalid_participant_ids) > 10:
+                                    error_msg += f" (participant IDs: {ids_str}, ... and {len(invalid_participant_ids) - 10} more)"
+                                else:
+                                    error_msg += f" (participant IDs: {ids_str})"
+                        errors.append(error_msg)
             
             elif validation_type == 'unique':
                 # Check for unique values
                 if field in mapped_df.columns:
-                    duplicates = mapped_df[field].duplicated().sum()
+                    duplicate_mask = mapped_df[field].duplicated(keep=False)  # Mark all duplicates, not just subsequent ones
+                    duplicates = duplicate_mask.sum()
                     if duplicates > 0:
-                        errors.append(f"Field '{field}' has {duplicates} duplicate values")
+                        # Get the unique duplicate values
+                        duplicate_values = mapped_df.loc[duplicate_mask, field].dropna().unique()
+                        values_str = ', '.join([f"'{x}'" for x in sorted(duplicate_values)[:10]])
+                        if len(duplicate_values) > 10:
+                            values_str += f", ... and {len(duplicate_values) - 10} more"
+                        
+                        error_msg = f"Field '{field}' has {duplicates} duplicate values: {values_str}"
+                        if has_participant_id:
+                            duplicate_participant_ids = mapped_df.loc[duplicate_mask, participant_id_field].dropna().unique()
+                            if len(duplicate_participant_ids) > 0:
+                                ids_str = ', '.join([str(x) for x in sorted(duplicate_participant_ids)[:10]])
+                                if len(duplicate_participant_ids) > 10:
+                                    error_msg += f" (participant IDs: {ids_str}, ... and {len(duplicate_participant_ids) - 10} more)"
+                                else:
+                                    error_msg += f" (participant IDs: {ids_str})"
+                        errors.append(error_msg)
         
         return errors
     

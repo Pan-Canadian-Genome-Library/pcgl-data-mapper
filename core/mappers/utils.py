@@ -23,6 +23,30 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def _format_context(context: Optional[Dict[str, Any]] = None) -> str:
+    """
+    Format context information for log messages.
+    
+    Args:
+        context: Optional context dictionary with keys like 'participant_id', 'record_id', 'target_field', etc.
+        
+    Returns:
+        Formatted context string (e.g., "[participant_id=P001, target_field=age_at_diagnosis]") or empty string
+    """
+    if not context:
+        return ""
+    
+    parts = []
+    if 'participant_id' in context and context['participant_id']:
+        parts.append(f"participant_id={context['participant_id']}")
+    if 'record_id' in context and context['record_id']:
+        parts.append(f"record_id={context['record_id']}")
+    if 'target_field' in context and context['target_field']:
+        parts.append(f"target_field={context['target_field']}")
+    
+    return f"[{', '.join(parts)}] " if parts else ""
+
+
 __all__ = [
     'log_mapping_summary',
     'convert_nullable_int_columns',
@@ -198,17 +222,21 @@ def _set_or_append_field(
 # AGE CALCULATION FUNCTIONS
 # ============================================================================
 
-def parse_age_with_units(age_value: Optional[Union[str, int, float]]) -> Optional[int]:
+def parse_age_with_units(age_value: Optional[Union[str, int, float]], context: Optional[Dict[str, Any]] = None) -> Optional[int]:
     """
     Parse age from various formats and convert to days.
     
     Supports:
     - Numeric value (default unit: years) - e.g., 25 → 25 years → 9131 days
-    - Value with unit suffix:
+    - Single value with unit suffix:
       - "24 months" → 730 days
       - "200 days" → 200 days
       - "17 weeks" → 119 days
       - "2.5 years" → 913 days
+    - Compound formats (multiple components):
+      - "1 year 7 months" → 578 days
+      - "2 years 3 months" → 821 days
+      - "5 months 2 weeks" → 166 days
     
     Unit conversion factors:
     - years: × 365.25 (accounting for leap years)
@@ -217,7 +245,8 @@ def parse_age_with_units(age_value: Optional[Union[str, int, float]]) -> Optiona
     - days: × 1
     
     Args:
-        age_value: Age as number (years) or string with unit suffix
+        age_value: Age as number (years) or string with unit suffix(es)
+        context: Optional context dict with 'participant_id' or 'record_id' for better error messages
         
     Returns:
         Age in days (int), or None if cannot parse
@@ -231,6 +260,8 @@ def parse_age_with_units(age_value: Optional[Union[str, int, float]]) -> Optiona
         200
         >>> parse_age_with_units("17 weeks")
         119
+        >>> parse_age_with_units("1 year 7 months")
+        578
     """
     if pd.isna(age_value):
         return None
@@ -242,7 +273,9 @@ def parse_age_with_units(age_value: Optional[Union[str, int, float]]) -> Optiona
             if 0 <= age_years <= 120:  # Reasonable age range
                 return int(age_years * 365.25)
             else:
-                logger.warning(f"Age {age_years} years seems unreasonable")
+                ctx = _format_context(context)
+                source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+                logger.warning(f"{ctx}Age {age_years} years seems unreasonable{source_info}")
                 return None
         except (ValueError, TypeError):
             return None
@@ -261,38 +294,51 @@ def parse_age_with_units(age_value: Optional[Union[str, int, float]]) -> Optiona
         
         # Parse value with unit suffix
         import re
-        # Match pattern: number (int or float) followed by optional whitespace and unit
-        match = re.match(r'^(\d+\.?\d*)\s*(years?|months?|weeks?|days?)$', age_str)
         
-        if match:
-            value_str, unit = match.groups()
+        # Try compound format first (e.g., "1 year 7 months", "2 years 3 months 5 days")
+        # Find all number-unit pairs in the string
+        compound_pattern = r'(\d+\.?\d*)\s*(years?|months?|weeks?|days?)'
+        matches = re.findall(compound_pattern, age_str)
+        
+        if matches:
+            total_days = 0
             try:
-                value = float(value_str)
+                for value_str, unit in matches:
+                    value = float(value_str)
+                    
+                    # Convert to days based on unit
+                    if unit.startswith('year'):
+                        total_days += int(value * 365.25)
+                    elif unit.startswith('month'):
+                        total_days += int(value * 30.44)  # Average days per month
+                    elif unit.startswith('week'):
+                        total_days += int(value * 7)
+                    elif unit.startswith('day'):
+                        total_days += int(value)
+                    else:
+                        ctx = _format_context(context)
+                        source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+                        logger.warning(f"{ctx}Unknown age unit: {unit}{source_info}")
+                        return None
+                
+                # Validate reasonable range
+                if 0 <= total_days <= 120 * 365.25:
+                    return total_days
+                else:
+                    ctx = _format_context(context)
+                    source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+                    logger.warning(f"{ctx}Calculated age {total_days} days ({total_days/365.25:.1f} years) seems unreasonable{source_info}")
+                    return None
+                    
             except ValueError:
-                logger.warning(f"Could not parse age value: {age_value}")
-                return None
-            
-            # Convert to days based on unit
-            if unit.startswith('year'):
-                days = int(value * 365.25)
-            elif unit.startswith('month'):
-                days = int(value * 30.44)  # Average days per month
-            elif unit.startswith('week'):
-                days = int(value * 7)
-            elif unit.startswith('day'):
-                days = int(value)
-            else:
-                logger.warning(f"Unknown age unit: {unit}")
-                return None
-            
-            # Validate reasonable range
-            if 0 <= days <= 120 * 365.25:
-                return days
-            else:
-                logger.warning(f"Calculated age {days} days ({days/365.25:.1f} years) seems unreasonable")
+                ctx = _format_context(context)
+                source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+                logger.warning(f"{ctx}Could not parse age value: {age_value}{source_info}")
                 return None
         else:
-            logger.warning(f"Could not parse age format: {age_value}")
+            ctx = _format_context(context)
+            source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+            logger.warning(f"{ctx}Could not parse age format: {age_value}{source_info}")
             return None
     
     return None
@@ -300,10 +346,11 @@ def parse_age_with_units(age_value: Optional[Union[str, int, float]]) -> Optiona
 
 def calculate_age_in_days(
     birth_date: Optional[Union[str, datetime, date]],
-    event_date: Optional[Union[str, datetime, date]],
+    event_date: Optional[Union[str, datetime, date, List[Union[str, datetime, date]]]],
     age_years: Optional[Union[float, str]] = None,
     assume_mid_month: bool = True,
-    event_offset_days: Optional[int] = None
+    event_offset_days: Optional[int] = None,
+    context: Optional[Dict[str, Any]] = None
 ) -> Optional[int]:
     """
     Calculate age in days from birth date to event date.
@@ -315,8 +362,9 @@ def calculate_age_in_days(
     Args:
         birth_date: Date of birth (string in 'YYYY/MM/DD' or 'YYYY-MM-DD' format,
                     datetime, or date object)
-        event_date: Date of event (string in 'YYYY/MM/DD' or 'YYYY-MM-DD' format, 
-                    datetime, or date object)
+        event_date: Date of event (single date or list of dates to try sequentially).
+                    If a list is provided, uses the first non-null date that can be parsed.
+                    Format: string in 'YYYY/MM/DD' or 'YYYY-MM-DD' format, datetime, or date object
         age_years: Age fallback value (supports multiple formats):
                   - Numeric value (interpreted as years): 25 → 9131 days
                   - String with units: "24 months", "200 days", "17 weeks"
@@ -325,24 +373,54 @@ def calculate_age_in_days(
                          assumes day 15 (default: True)
         event_offset_days: Days offset from event_date (positive for future, negative for past).
                           If provided, calculates age at (event_date + event_offset_days).
+        context: Optional context dict with 'participant_id' or 'record_id' for better error messages
         
     Returns:
         Age in days (int), or None if calculation not possible
     """
+    # Handle event_date as list - try each date sequentially
+    event_date_to_use = None
+    event_date_field_used = None
+    if isinstance(event_date, list):
+        field_names = context.get('event_date_field_names', []) if context else []
+        for i, candidate_date in enumerate(event_date):
+            if pd.notna(candidate_date):
+                # Try to parse this date
+                parsed = parse_date(candidate_date, assume_mid_month, context)
+                if parsed is not None:
+                    event_date_to_use = candidate_date
+                    event_date_field_used = field_names[i] if i < len(field_names) else f"field_{i}"
+                    ctx = _format_context(context)
+                    logger.debug(f"{ctx}Using event date from list: {event_date_field_used}='{candidate_date}'")
+                    break
+        # If no valid date found in list, event_date_to_use remains None
+    else:
+        event_date_to_use = event_date
+        if context and 'event_date_field_names' in context and context['event_date_field_names']:
+            event_date_field_used = context['event_date_field_names'][0]
+    
     # Primary method: calculate from birth date
-    if pd.notna(birth_date) and pd.notna(event_date):
+    # Log reason for fallback if birth_date is missing but event_date is available
+    if pd.isna(birth_date) and pd.notna(event_date_to_use):
+        ctx = _format_context(context)
+        source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+        logger.debug(f"{ctx}Cannot calculate age from dates: birth_date is null, falling back to age field{source_info}")
+    
+    if pd.notna(birth_date) and pd.notna(event_date_to_use):
         try:
             # Parse birth date - handle multiple formats
-            birth_dt = parse_date(birth_date, assume_mid_month)
+            birth_dt = parse_date(birth_date, assume_mid_month, context)
             if birth_dt is None:
-                logger.warning(f"Could not parse birth_date: {birth_date}")
+                ctx = _format_context(context)
+                logger.warning(f"{ctx}Could not parse birth_date: {birth_date}")
                 raise ValueError(f"Could not parse birth_date: {birth_date}")
             
             # Parse event date - handle multiple date formats
-            event_dt = parse_date(event_date, assume_mid_month)
+            event_dt = parse_date(event_date_to_use, assume_mid_month, context)
             if event_dt is None:
-                logger.warning(f"Could not parse event_date: {event_date}")
-                raise ValueError(f"Could not parse event_date: {event_date}")
+                ctx = _format_context(context)
+                logger.warning(f"{ctx}Could not parse event_date: {event_date_to_use}")
+                raise ValueError(f"Could not parse event_date: {event_date_to_use}")
             
             # Calculate days difference
             age_days = (event_dt - birth_dt).days
@@ -352,34 +430,45 @@ def calculate_age_in_days(
                 try:
                     offset = int(float(event_offset_days))
                     age_days += offset
-                    logger.debug(f"Applied offset of {offset} days to age calculation")
+                    ctx = _format_context(context)
+                    logger.debug(f"{ctx}Applied offset of {offset} days to age calculation")
                 except (ValueError, TypeError) as e:
-                    logger.warning(f"Invalid event_offset_days value: {event_offset_days}, error: {e}")
+                    ctx = _format_context(context)
+                    logger.warning(f"{ctx}Invalid event_offset_days value: {event_offset_days}, error: {e}")
             
             # Validate result
             if age_days < 0:
-                logger.warning(f"Negative age calculated: {age_days} days (event before birth)")
+                ctx = _format_context(context)
+                source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+                logger.warning(f"{ctx}Negative age calculated: {age_days} days (event before birth){source_info}")
                 return None
             if age_days > 120 * 365.25:
-                logger.warning(f"Age {age_days} days ({age_days/365.25:.1f} years) seems unreasonable")
+                ctx = _format_context(context)
+                logger.warning(f"{ctx}Age {age_days} days ({age_days/365.25:.1f} years) seems unreasonable")
             
             return age_days
                 
         except (ValueError, TypeError) as e:
-            logger.debug(f"Error calculating age from birth date: {e}")
+            ctx = _format_context(context)
+            source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+            logger.debug(f"{ctx}Error calculating age from birth date: {e}{source_info}")
             # Fall through to alternative method
     
     # Fallback method: use age with units parsing
     if pd.notna(age_years):
         try:
           # Try parsing with units first (handles "24 months", "200 days", etc.)
-          age_days = parse_age_with_units(age_years)
+          age_days = parse_age_with_units(age_years, context)
           if age_days is not None:
-              logger.debug(f"Used age fallback: {age_years} = {age_days} days")
+              ctx = _format_context(context)
+              source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+              logger.debug(f"{ctx}Used age fallback: {age_years} = {age_days} days{source_info}")
               return age_days
 
         except (ValueError, TypeError) as e:
-            logger.debug(f"Error using age fallback: {e}")
+            ctx = _format_context(context)
+            source_info = f" (from {context.get('source_fields', 'unknown fields')})" if context and 'source_fields' in context else ""
+            logger.debug(f"{ctx}Error using age fallback: {e}{source_info}")
     
     # Both methods failed
     return None
@@ -387,7 +476,8 @@ def calculate_age_in_days(
 
 def parse_date(
     date_value: Optional[Union[str, datetime, date]],
-    assume_mid_month: bool = True
+    assume_mid_month: bool = False,
+    context: Optional[Dict[str, Any]] = None
 ) -> Optional[date]:
     """
     Parse date from various formats.
@@ -445,7 +535,8 @@ def parse_date(
             except ValueError:
                 continue
     
-    logger.warning(f"Could not parse date: {date_value}")
+    ctx = _format_context(context)
+    logger.warning(f"{ctx}Could not parse date: {date_value}")
     return None
 
 # ============================================================================
@@ -530,7 +621,8 @@ def validate_age_in_days(
     Returns:
         True if valid, False otherwise
     """
-    if age_days is None:
+    # Check for None, NaN, or pd.NA using pandas isna
+    if pd.isna(age_days):
         return allow_none
     
     try:
@@ -627,13 +719,15 @@ def convert_nullable_int_columns(
 
 
 def format_date_to_pcgl(
-    date_value: Optional[Union[str, datetime, date]]
+    date_value: Optional[Union[str, datetime, date]],
+    context: Optional[Dict[str, Any]] = None
 ) -> Optional[str]:
     """
     Format date to PCGL standard format (YYYY-MM-DD).
     
     Args:
         date_value: Date value (string, datetime, or date object)
+        context: Optional context dict with 'participant_id' or 'record_id' for better error messages
         
     Returns:
         Formatted date string (YYYY-MM-DD), or None if invalid/missing
@@ -643,12 +737,13 @@ def format_date_to_pcgl(
     
     try:
         # Parse date first
-        parsed_date = parse_date(date_value)
+        parsed_date = parse_date(date_value, context=context)
         if parsed_date:
             return parsed_date.strftime('%Y-%m-%d')
         return None
     except Exception as e:
-        logger.warning(f"Error formatting date {date_value}: {e}")
+        ctx = _format_context(context)
+        logger.warning(f"{ctx}Error formatting date {date_value}: {e}")
         return None
 
 

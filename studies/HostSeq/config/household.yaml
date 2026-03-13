@@ -9,7 +9,7 @@
 entity:
   name: Household
   source_files:
-    primary: "HostSeqHarmonizedAllVariablesDummy.csv"  # Main source file
+    primary: "HostSeqCRFHarmonized-PCGLTrans_DATA_2026-03-02_1241.csv"  # Main source file
 
   fields:
     extension:
@@ -46,6 +46,11 @@ filters:
           - field: covid19_test
             op: equals
             value: 1
+      - field: dna_number
+        op: is_not_null
+      - field: dna_number
+        op: not_equals
+        value: INPUT
 
   rows:
     - name: baseline
