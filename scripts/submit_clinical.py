@@ -486,13 +486,11 @@ def main(args):
         # Step 1: Retrieve category ID
         category_id = retrieve_category_id(args.clinical_url, args.study_id, args.token)
         
-        # Step 2: Check and delete existing submissions (skip in dry-run or resume mode)
-        if not args.dry_run and not args.resume:
+        # Step 2: Check and delete existing submissions (skip only in dry-run mode)
+        if not args.dry_run:
             check_existing_submission(category_id, args.clinical_url, args.study_id, args.token)
-        elif args.dry_run:
-            print("\n[DRY RUN] Skipping existing submission check/deletion")
         else:
-            print("\n[RESUME] Skipping existing submission check/deletion")
+            print("\n[DRY RUN] Skipping existing submission check/deletion")
         
         # Step 3: Prepare batches
         if args.resume:
