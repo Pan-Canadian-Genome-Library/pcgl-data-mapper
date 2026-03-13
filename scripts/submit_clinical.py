@@ -431,16 +431,38 @@ def main(args):
     print(f"Entity: {args.entity}")
     print(f"Input Directory: {args.input_directory}")
     print(f"Batch Size: {args.batch_size} records per batch")
+    if args.resume:
+        print("Resume Mode: YES")
     print("=" * 80)
     
-    # Create submission folder name
-    if args.dry_run:
-        submission_folder = "dry_run"
+    # Create or resume submission folder
+    if args.resume:
+        # Find most recent submission folder to resume
+        submission_base = os.path.join(args.input_directory, "submission")
+        if not os.path.exists(submission_base):
+            raise ValueError(f"No submission folder found at {submission_base}. Cannot resume.")
+        
+        submission_folders = [
+            f for f in glob.glob(os.path.join(submission_base, "*"))
+            if os.path.isdir(f) and os.path.basename(f) != "dry_run"
+        ]
+        
+        if not submission_folders:
+            raise ValueError("No previous submission found to resume. Run without --resume to start a new submission.")
+        
+        # Use most recent submission folder
+        submission_dir = max(submission_folders, key=os.path.getmtime)
+        submission_folder = os.path.basename(submission_dir)
+        print(f"\nResuming submission from: {submission_folder}")
     else:
-        submission_folder = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    submission_dir = os.path.join(args.input_directory, "submission", submission_folder)
-    os.makedirs(submission_dir, exist_ok=True)
+        # Create new submission folder
+        if args.dry_run:
+            submission_folder = "dry_run"
+        else:
+            submission_folder = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        submission_dir = os.path.join(args.input_directory, "submission", submission_folder)
+        os.makedirs(submission_dir, exist_ok=True)
     
     # Initialize log data
     log_lines = []
@@ -455,6 +477,8 @@ def main(args):
     log_lines.append(f"Input Directory: {args.input_directory}")
     log_lines.append(f"Batch Size: {args.batch_size} records per batch")
     log_lines.append(f"Submission Folder: {submission_folder}")
+    if args.resume:
+        log_lines.append("Resume Mode: YES")
     log_lines.append("=" * 80)
     log_lines.append("")
     
@@ -462,39 +486,63 @@ def main(args):
         # Step 1: Retrieve category ID
         category_id = retrieve_category_id(args.clinical_url, args.study_id, args.token)
         
-        # Step 2: Check and delete existing submissions (skip deletion in dry-run)
-        if not args.dry_run:
+        # Step 2: Check and delete existing submissions (skip in dry-run or resume mode)
+        if not args.dry_run and not args.resume:
             check_existing_submission(category_id, args.clinical_url, args.study_id, args.token)
-        else:
+        elif args.dry_run:
             print("\n[DRY RUN] Skipping existing submission check/deletion")
+        else:
+            print("\n[RESUME] Skipping existing submission check/deletion")
         
-        # Step 3: Find entity file to submit
-        entity_file = os.path.join(args.input_directory, f"{args.entity}.csv")
-        
-        if not os.path.exists(entity_file):
-            raise ValueError(f"Entity file not found: {entity_file}")
-        
-        print(f"\nEntity file: {entity_file}")
-        log_lines.append(f"Entity file: {entity_file}")
-        
-        # Step 4: Split entity into batches
-        print("\nPreparing batches...")
-        log_lines.append("\nPreparing batches...")
-        batch_dirs = split_entity_into_batches(entity_file, args.batch_size, os.path.join(args.input_directory, "submission"), submission_folder)
-        
-        if not batch_dirs:
-            print("No batches to submit")
-            log_lines.append("No batches to submit")
-            return
+        # Step 3: Prepare batches
+        if args.resume:
+            # Load existing batches from submission folder
+            print("\nLoading existing batches...")
+            log_lines.append("\nLoading existing batches...")
+            
+            batch_dirs = sorted(glob.glob(os.path.join(submission_dir, f"{args.entity}_batch_*")))
+            
+            if not batch_dirs:
+                raise ValueError(
+                    f"No batch directories found in {submission_dir} for entity '{args.entity}'. "
+                    f"Cannot resume submission."
+                )
+            
+            print(f"Found {len(batch_dirs)} existing batches")
+            log_lines.append(f"Found {len(batch_dirs)} existing batches")
+            
+        else:
+            # Create new batches by splitting entity file
+            entity_file = os.path.join(args.input_directory, f"{args.entity}.csv")
+            
+            if not os.path.exists(entity_file):
+                raise ValueError(f"Entity file not found: {entity_file}")
+            
+            print(f"\nEntity file: {entity_file}")
+            log_lines.append(f"Entity file: {entity_file}")
+            
+            print("\nPreparing batches...")
+            log_lines.append("\nPreparing batches...")
+            batch_dirs = split_entity_into_batches(
+                entity_file, 
+                args.batch_size, 
+                os.path.join(args.input_directory, "submission"), 
+                submission_folder
+            )
+            
+            if not batch_dirs:
+                print("No batches to submit")
+                log_lines.append("No batches to submit")
+                return
         
         log_lines.append(f"Total batches: {len(batch_dirs)}")
         log_lines.append("")
         
-        # Step 5: Setup state tracking for resumability
+        # Step 4: Setup state tracking for resumability
         state_file = os.path.join(submission_dir, f"{args.entity}_submission_state.json")
         batch_states = load_submission_state(state_file) if args.resume else {}
         
-        # Step 6: Submit each batch
+        # Step 5: Submit each batch
         submission_ids = []
         
         for batch_idx, batch_dir in enumerate(batch_dirs, 1):
@@ -513,8 +561,8 @@ def main(args):
             
             # Add delay between batches (skip for first batch)
             if batch_idx > 1 and not args.dry_run:
-                print(f"\nWaiting 5 seconds before next batch...")
-                time.sleep(5)
+                print(f"\nWaiting 15 seconds before next batch...")
+                time.sleep(15)
             if len(batch_dirs) > 1:
                 print(f"\nBatch {batch_idx}/{len(batch_dirs)}:")
                 log_lines.append(f"\nBatch {batch_idx}/{len(batch_dirs)}:")
@@ -645,7 +693,9 @@ def main(args):
         # Always write log file, even on failure
         log_file = os.path.join(submission_dir, f"{args.entity}_submission.log")
         try:
-            with open(log_file, 'w') as f:
+            # Append to log if resuming, otherwise create new log
+            mode = 'a' if args.resume else 'w'
+            with open(log_file, mode) as f:
                 f.write('\n'.join(log_lines))
             print(f"\nLog file saved to: {log_file}")
         except Exception as log_error:
@@ -677,6 +727,9 @@ Examples:
   # Using environment variable for token
   export PCGL_TOKEN="your_token_here"
   python submit_clinical.py -cu https://submission.pcgl.org -si STUDY-01 -t $PCGL_TOKEN -e participant -id data/mapped/STUDY-01/
+
+  # Resume a failed submission (uses most recent submission folder)
+  python submit_clinical.py -cu https://submission.pcgl.org -si STUDY-01 -t YOUR_TOKEN -e participant -id data/mapped/STUDY-01/ --resume
         '''
     )
     
@@ -687,7 +740,7 @@ Examples:
     parser.add_argument("-id", "--input-directory", dest="input_directory", required=False, default="./", help="Directory containing CSV files to submit (default: current directory)")
     parser.add_argument("-bs", "--batch-size", dest="batch_size", type=int, default=200, help="Maximum number of records per batch (default: 200)")
     parser.add_argument("-dr", "--dry-run", dest="dry_run", action="store_true", help="Dry run mode: check files, split into batches, but don't submit data")
-    parser.add_argument("-r", "--resume", dest="resume", action="store_true", help="Resume mode: skip already completed batches based on saved state file")
+    parser.add_argument("-r", "--resume", dest="resume", action="store_true", help="Resume mode: finds the most recent submission folder and skips already completed batches. Use this to continue after a failed submission.")
     
     args = parser.parse_args()
     main(args)
