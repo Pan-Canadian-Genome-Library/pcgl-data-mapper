@@ -552,7 +552,14 @@ class EntityMapper:
             # Check if result matches condition
             matches = False
             if match_operator == 'equals':
-                matches = (pd.notna(result_val) and result_val == match_value)
+                # Handle type coercion: compare as strings or numbers flexibly
+                if pd.notna(result_val):
+                    # Try numeric comparison first
+                    try:
+                        matches = (float(result_val) == float(match_value))
+                    except (ValueError, TypeError):
+                        # Fall back to string comparison
+                        matches = (str(result_val) == str(match_value))
             elif match_operator == 'in':
                 matches = (pd.notna(result_val) and result_val in match_value)
             elif match_operator == 'not_equals':
@@ -979,9 +986,16 @@ class EntityMapper:
                         result_cols = result_cols[:min_count]
                         date_cols = date_cols[:min_count]
                     
-                    # Sort columns to ensure correct pairing (e.g., _1, _2, ... _37)
-                    result_cols = sorted(result_cols)
-                    date_cols = sorted(date_cols)
+                    # Sort columns naturally to ensure correct pairing (e.g., _1, _2, ... _10, _11)
+                    # Natural sort handles numeric suffixes correctly (e.g., _2 before _10)
+                    import re
+                    def natural_sort_key(col):
+                        """Extract numeric parts for natural sorting (e.g., _1, _2, ..., _10)"""
+                        parts = re.split(r'(\d+)', col)
+                        return [int(p) if p.isdigit() else p for p in parts]
+                    
+                    result_cols = sorted(result_cols, key=natural_sort_key)
+                    date_cols = sorted(date_cols, key=natural_sort_key)
                     
                     # Debug: Show sample values from result columns
                     sample_result_values = {}
@@ -989,15 +1003,19 @@ class EntityMapper:
                         unique_vals = df[col].dropna().unique()
                         sample_result_values[col] = list(unique_vals[:5])
                     if sample_result_values:
+                        self.logger.info(f"First 3 result columns after natural sort: {result_cols[:3]}")
+                        self.logger.info(f"First 3 date columns after natural sort: {date_cols[:3]}")
                         self.logger.info(f"Sample values from result columns: {sample_result_values}")
                         self.logger.info(f"Looking for match: {match_operator} {match_value}")
                     
-                    df[target] = df.apply(
-                        lambda row: self._find_first_matching_date(
+                    # Apply matching with detailed logging for first few rows
+                    def find_match_with_logging(row):
+                        result = self._find_first_matching_date(
                             row, result_cols, date_cols, match_value, match_operator
-                        ),
-                        axis=1
-                    )
+                        )
+                        return result
+                    
+                    df[target] = df.apply(find_match_with_logging, axis=1)
                     
                     matched_count = df[target].notna().sum()
                     self.logger.info(
@@ -1018,18 +1036,6 @@ class EntityMapper:
             
             else:
                 self.logger.warning(f"Unknown preprocessing type: {step_type}")
-        
-        # Debug: Log available fields after preprocessing for age calculation
-        age_related_fields = ['birth_date', 'sx_date', 'reinfx_date', 'diagnosis_date', 'age', 'dconsverbpa']
-        available_age_fields = [f for f in age_related_fields if f in df.columns]
-        if available_age_fields:
-            self.logger.info(f"Age-related fields available after preprocessing: {available_age_fields}")
-            for field in available_age_fields:
-                non_null = df[field].notna().sum()
-                self.logger.info(f"  {field}: {non_null}/{len(df)} non-null values")
-                if non_null > 0:
-                    sample_values = df[df[field].notna()][field].head(3).tolist()
-                    self.logger.info(f"    Sample values: {sample_values}")
         
         return df
     
