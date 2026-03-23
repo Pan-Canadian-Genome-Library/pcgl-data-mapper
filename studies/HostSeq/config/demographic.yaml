@@ -95,7 +95,7 @@ mappings:
     target_type: age
     params:
       birth_date_field: birth_date
-      event_date_field: [enrollment_date, covid19_diagnosis_date, covid19_test_date, date_admission]
+      event_date_field: enrollment_date
       age_fallback_field: age
   
   # ---------------------------------------------------------------------------
@@ -119,9 +119,9 @@ mappings:
     value_mappings:
       0: ["Alive", null, "Discharged alive"]
       1: ["Alive", null, "Hospitalization (ongoing)"]
-      2: ["Missing - Unknown", null,  "Transfer to another facility"]
+      2: ["Alive", null,  "Transfer to another facility"]
       3: ["Deceased", "Died of other reasons", "Death"]
-      4: ["Missing - Unknown", null, "Palliative discharge (likely deceased but not confirmed)"]
+      4: ["Alive", null, "Palliative discharge (likely deceased but not confirmed)"]
       5: ["Alive", null, "Not hospitalized"]
       -1: ["Missing - Unknown", null, "Don't know"]
     
