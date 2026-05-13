@@ -17,9 +17,11 @@ import logging
 import pandas as pd
 from typing import Dict, Any, Optional, Union, Callable, List
 from datetime import datetime, date
+from pathlib import Path
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
 
 __all__ = [
     'log_mapping_summary',
@@ -33,10 +35,63 @@ __all__ = [
     'generate_record_id',
     'parse_date',
     'format_date_to_pcgl',
+    'read_data_file',
     'calculate_duration_in_days',
     'clean_numeric_string',
     'safe_int_conversion',
 ]
+
+# ============================================================================
+# DATA READING FUNCTIONS
+# ============================================================================
+
+def read_data_file(file_path: Path) -> pd.DataFrame:
+    """
+    Read data file with automatic format detection.
+    
+    Supports CSV, TSV, and TXT files with automatic delimiter detection.
+    
+    Args:
+        file_path: Path to data file
+        
+    Returns:
+        DataFrame with loaded data
+    """
+    file_path = Path(file_path)
+    suffix = file_path.suffix.lower()
+    
+    # Determine delimiter based on file extension
+    if suffix == '.tsv':
+        delimiter = '\t'
+    elif suffix == '.txt':
+        # Try to auto-detect delimiter for .txt files
+        delimiter = None  # pandas will auto-detect
+    else:  # .csv or others
+        delimiter = ','
+    
+    # Read with appropriate delimiter and encoding fallbacks
+    encodings_to_try = ['utf-8', 'utf-8-sig', 'latin1']
+    last_error = None
+
+    for encoding in encodings_to_try:
+        try:
+            if delimiter:
+                df = pd.read_csv(file_path, sep=delimiter, encoding=encoding)
+            else:
+                # Let pandas auto-detect (works for most cases)
+                df = pd.read_csv(file_path, sep=None, engine='python', encoding=encoding)
+            return df
+        except UnicodeDecodeError as exc:
+            last_error = exc
+            continue
+
+    # Final fallback: replace undecodable characters
+    if delimiter:
+        df = pd.read_csv(file_path, sep=delimiter, encoding='utf-8', errors='replace')
+    else:
+        df = pd.read_csv(file_path, sep=None, engine='python', encoding='utf-8', errors='replace')
+    
+    return df
 
 
 # ============================================================================
@@ -109,6 +164,8 @@ def _set_or_append_field(
     """
     Set field value or append if field name contains 'note' or append_mode is True.
     
+    Only appends if the value is different from existing values (prevents duplicates).
+    
     Args:
         record: Record dictionary to update
         field_name: Field name
@@ -123,8 +180,15 @@ def _set_or_append_field(
     should_append = append_mode or is_note_field
     
     if should_append and record.get(field_name):
-        # Append to existing value
-        record[field_name] += "|" + str(value)
+        # Only append if value is different from existing values
+        existing = str(record[field_name])
+        new_value = str(value)
+        
+        # Check if value already exists in pipe-separated list
+        existing_values = existing.split("|")
+        if new_value not in existing_values:
+            record[field_name] += "|" + new_value
+        # else: value already exists, skip appending to avoid duplicates
     else:
         # Set or replace value
         record[field_name] = value
@@ -271,18 +335,20 @@ def calculate_age_in_days(
             # Parse birth date - handle multiple formats
             birth_dt = parse_date(birth_date, assume_mid_month)
             if birth_dt is None:
+                logger.warning(f"Could not parse birth_date: {birth_date}")
                 raise ValueError(f"Could not parse birth_date: {birth_date}")
             
             # Parse event date - handle multiple date formats
             event_dt = parse_date(event_date, assume_mid_month)
             if event_dt is None:
+                logger.warning(f"Could not parse event_date: {event_date}")
                 raise ValueError(f"Could not parse event_date: {event_date}")
             
             # Calculate days difference
             age_days = (event_dt - birth_dt).days
             
             # Apply offset if provided
-            if event_offset_days is not None:
+            if pd.notna(event_offset_days):
                 try:
                     offset = int(float(event_offset_days))
                     age_days += offset
@@ -394,24 +460,35 @@ def generate_record_id(
     """
     Generate unique record ID in standardized format.
     
-    Format: {record_prefix}_{record_type}_{record_suffix} or {record_prefix}_{record_type}
+    Format: 
+    - With prefix: {record_prefix}_{record_type}_{record_suffix} or {record_prefix}_{record_type}
+    - Without prefix: {record_type}_{record_suffix} or {record_type}
     
     Args:
-        record_prefix: Prefix for the record ID (typically participant ID)
-        record_type: Type of record (e.g., 'comorbidity', 'phenotype', 'treatment', 'measurement')
+        record_prefix: Optional prefix for the record ID (typically participant ID). Can be None.
+        record_type: Type of record (e.g., 'comorbidity', 'phenotype', 'treatment', 'member')
         record_suffix: Optional suffix built from field values or literal strings
         
     Returns:
-        Unique record ID (e.g., "P001_treatment_cort" or "P001_comorbidity"), or None if record_prefix is missing
+        Unique record ID (e.g., "P001_treatment_cort", "P001_comorbidity", "member_0", "member"), 
+        or None if record_type is missing
     """
-    if pd.isna(record_prefix):
+    # Return None if no record type specified
+    if not record_type or pd.isna(record_type):
         return None
     
-    # Build ID with or without suffix
-    if record_suffix:
+    # Build ID based on available components
+    has_prefix = record_prefix is not None and not pd.isna(record_prefix)
+    has_suffix = record_suffix is not None and record_suffix != ""
+    
+    if has_prefix and has_suffix:
         return f"{record_prefix}_{record_type}_{record_suffix}"
-    else:
+    elif has_prefix:
         return f"{record_prefix}_{record_type}"
+    elif has_suffix:
+        return f"{record_type}_{record_suffix}"
+    else:
+        return f"{record_type}"
 
 
 # ============================================================================
@@ -515,22 +592,34 @@ def convert_nullable_int_columns(
             if is_candidate:
                 # Check if column has numeric data with possible nulls
                 if df[col].dtype in ['float64', 'object']:
-                    # Try to determine if values are actually integers
+                    # Try to determine if values are actually integers or can be rounded to integers
                     non_null_values = df[col].dropna()
                     if len(non_null_values) > 0:
                         try:
-                            # Check if all non-null values are integer-like
-                            if all(float(v).is_integer() for v in non_null_values):
-                                columns_to_convert.append(col)
+                            # Check if all non-null values are numeric (can be converted to float)
+                            # Age fields from calculations may have float precision errors
+                            # so we accept any numeric values, not just perfect integers
+                            _ = [float(v) for v in non_null_values]
+                            columns_to_convert.append(col)
                         except (ValueError, TypeError):
                             pass
+    
+    # Log what columns were identified for conversion
+    if columns_to_convert:
+        logger.info(f"Auto-detected {len(columns_to_convert)} columns for Int64 conversion: {columns_to_convert}")
     
     # Convert identified columns
     for col in columns_to_convert:
         if col in df.columns:
             try:
-                df[col] = df[col].astype('Int64')
-                logger.debug(f"Converted column '{col}' to Int64 dtype")
+                # Round float values before converting to Int64
+                # This handles cases where calculated fields produce floats like 11523.299998995
+                if df[col].dtype in ['float64', 'float32']:
+                    df[col] = df[col].round().astype('Int64')
+                    logger.debug(f"Converted column '{col}' (float) to Int64 dtype")
+                else:
+                    df[col] = df[col].astype('Int64')
+                    logger.debug(f"Converted column '{col}' to Int64 dtype")
             except (ValueError, TypeError) as e:
                 logger.warning(f"Could not convert column '{col}' to Int64: {e}")
     

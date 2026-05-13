@@ -4,7 +4,7 @@ P002,1992-07-22,2020-06-15,Female,East Asian,Not Hispanic or Latino,Alive,28,1,2
 P003,1978-11-08,2020-04-20,Male,Latin American,Hispanic or Latino,Deceased,42,1,2020-04-18,U07.1,1,1,0,1,10,mg,S003,Saliva,2020-04-20,1,88.7,mg/dL,,
 P004,1965-02-28,2020-07-05,Female,White,Not Hispanic or Latino,Alive,55,1,,,0,1,1,,,,S004,Saliva,2020-07-05,1,102.1,mg/dL,,
 P005,1988-09-12,2020-05-25,Male,Black,Not Hispanic or Latino,Alive,32,1,2020-05-23,U07.1,0,0,0,1,90,mg,S005,Saliva,2020-05-25,1,78.9,mg/dL,,
-P001,1985-03-15,,,,,,,,,,,,,,,,S006,Blood,2020-05-17,1,110.2,mg/dL,lab_results,1
-P001,1985-03-15,,,,,,,,,,,,,,,,S007,Blood,2020-05-24,1,105.8,mg/dL,lab_results,2
-P002,1992-07-22,,,,,,,,,,,,,,,,S008,Saliva,2020-06-22,1,125.7,mg/dL,lab_results,1
-P003,1978-11-08,,,,,,,,,,,,,,,,S009,Saliva,2020-04-27,1,92.3,mg/dL,lab_results,1
+P001,,,,,,,,,,,,,,,,,S006,Blood,2020-05-17,1,110.2,mg/dL,lab_results,1
+P001,,,,,,,,,,,,,,,,,S007,Blood,2020-05-24,1,105.8,mg/dL,lab_results,2
+P002,,,,,,,,,,,,,,,,,S008,Saliva,2020-06-22,1,125.7,mg/dL,lab_results,1
+P003,,,,,,,,,,,,,,,,,S009,Saliva,2020-04-27,1,92.3,mg/dL,lab_results,1

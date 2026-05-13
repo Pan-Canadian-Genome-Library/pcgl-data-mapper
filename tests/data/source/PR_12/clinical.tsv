@@ -1,0 +1,8 @@
+participant_id	diagnosis_code	diagnosis_name	disease_status	diag_age
+P004	U07.1	COVID-19	active	45
+P001	U07.1	COVID-19	active	32
+P005	J12.89	Viral pneumonia	resolved	67
+P002	U07.1	COVID-19	resolved	28
+P006	U07.1	COVID-19	active	51
+P003	J18.9	Pneumonia	active	15
+P007	U07.1	COVID-19	resolved	42

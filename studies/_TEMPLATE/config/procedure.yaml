@@ -6,6 +6,16 @@
 entity:
   name: Procedure
   
+  # Optional: Multi-file input support
+  # Uncomment and customize to load from specific CSV file(s)
+  # source_files:
+  #   primary: "procedures.csv"  # or "clinical.csv"
+  #   # Optional: Join additional files if needed
+  #   # secondary:
+  #   #   - file: "demographics.csv"
+  #   #     join_on: participant_id
+  #   #     columns: [age, dob_year]
+  
   fields:
     base:
       - submitter_treatment_id

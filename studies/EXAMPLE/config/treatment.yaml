@@ -83,12 +83,18 @@ configs:
 # PREPROCESSING FILTERS
 # =============================================================================
 filters:
-  eligible_participants: true
-  participant_eligibility:
-    - field: consent
-      operator: equals
-      value: 1
-  include_rows:
-    baseline: true
-    repeat_instruments: []
   participant_id_field: "participant_id"
+  
+  # Step 1: Participant eligibility
+  participant:
+    filter:
+      - field: consent
+        op: equals
+        value: 1
+  
+  # Step 2: Row selection
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null

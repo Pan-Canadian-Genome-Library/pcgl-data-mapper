@@ -1,0 +1,51 @@
+# PR_12 Study - Participant Configuration
+
+entity:
+  name: Participant
+
+  fields:
+    base:
+      - study_id
+      - submitter_participant_id
+      - duo_permission
+      - duo_modifier
+  pattern: direct
+  
+  # 1. Multi-file input with primary file only
+  source_files:
+    primary: "demographics.csv"              # Main data source
+
+
+# 2. Refined filter structure to support combined inclusion rules
+filters:
+  participant_id_field: "participant_id"
+  
+  participant:
+    filter:
+      # Must have consent_date (not null)
+      - field: consent_date
+        op: is_not_null
+      
+
+mappings:
+  - source_field: null
+    target_field: study_id
+    default_value: "PR_12"
+  
+  - source_field: participant_id
+    target_field: submitter_participant_id
+  
+  - source_field: null
+    target_field: duo_permission
+    default_value: "DUO:0000006 (health or medical or biomedical research)"
+  
+  - source_field: null
+    target_field: duo_modifier
+    default_value: "DUO:0000021 (ethics approval required)"
+
+validations:
+  - type: required
+    field: submitter_participant_id
+  
+  - type: unique
+    field: submitter_participant_id

@@ -6,6 +6,11 @@
 entity:
   name: Sociodemographic
   
+  # Optional: Multi-file input support 
+  # Uncomment and customize to load from specific CSV file(s)
+  # source_files:
+  #   primary: "demographics.csv"  # or "sociodemographic.csv"
+  
   fields:
     base:
       - submitter_sociodem_id
