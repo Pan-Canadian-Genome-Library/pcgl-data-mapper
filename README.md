@@ -2,12 +2,38 @@
 
 YAML-driven framework for mapping research data to PCGL data model. 
 
+> [!IMPORTANT] 
+> **Python 3.9 – 3.12** is supported (Python 3.13+ is not currently supported; `distutils`, which is required by a transitive dependency, was removed from the standard library in Python 3.13)
+
 ## Installation
+
+### Using `uv` (recommended)
+
+[`uv`](https://docs.astral.sh/uv/) is the recommended tool for managing the virtual environment and dependencies.
+
+```bash
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone the repository
+git clone https://github.com/Pan-Canadian-Genome-Library/pcgl-data-mapper.git
+cd pcgl-data-mapper
+
+# Create virtual environment, pin Python 3.12, and install all dependencies
+uv python pin 3.12
+uv sync --extra dev
+```
+
+### Using `pip` (alternative)
 
 ```bash
 # Clone the repository
 git clone https://github.com/Pan-Canadian-Genome-Library/pcgl-data-mapper.git
 cd pcgl-data-mapper
+
+# Create and activate a virtual environment first
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
@@ -43,7 +69,7 @@ pip install -r requirements.txt
 
 ### 1. Try the EXAMPLE study first
 ```bash
-python prototype_mapper.py --study_id EXAMPLE --input_csv data/source/EXAMPLE.csv --output_dir data/mapped/EXAMPLE/
+uv run python prototype_mapper.py --study_id EXAMPLE --input_csv data/source/EXAMPLE.csv --output_dir data/mapped/EXAMPLE/
 ```
 
 ### 2. Create your own study from template
@@ -58,12 +84,12 @@ Customize entity YAML files to match your source data fields and target PCGL sch
 
 **Single-file mode** (one CSV with all data):
 ```bash
-python prototype_mapper.py --study_id MyStudy --input_csv data/source/your_data.csv --output_dir data/mapped/MyStudy/
+uv run python prototype_mapper.py --study_id MyStudy --input_csv data/source/your_data.csv --output_dir data/mapped/MyStudy/
 ```
 
 **Multi-file mode** (directory with multiple files):
 ```bash
-python prototype_mapper.py --study_id MyStudy --input_dir data/source/MyStudy/ --output_dir data/mapped/MyStudy/
+uv run python prototype_mapper.py --study_id MyStudy --input_dir data/source/MyStudy/ --output_dir data/mapped/MyStudy/
 ```
 
 ### 5. Check the output
@@ -197,7 +223,7 @@ Run with verbose logging: check `prototype_mapper.log` for details.
 - Direct mapping entities: participant, demographic, specimen, sample, diagnosis, sociodemographic
 - Expansion mapping entities: comorbidity, medication, treatment, measurement
 - See `studies/EXAMPLE/config/*.yaml` for basic configuration patterns
-- Run with: `python prototype_mapper.py --study_id EXAMPLE --input_csv data/source/EXAMPLE.csv --output_dir data/mapped/EXAMPLE/`
+- Run with: `uv run python prototype_mapper.py --study_id EXAMPLE --input_csv data/source/EXAMPLE.csv --output_dir data/mapped/EXAMPLE/`
 
 **HostSeq study** - Complete production example with 15 entities (13 base + 2 extension)
 - Direct mapping entities: participant, demographic, specimen, sample, diagnosis, sociodemographic, demographic, hla
