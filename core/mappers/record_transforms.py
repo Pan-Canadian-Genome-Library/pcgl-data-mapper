@@ -125,40 +125,27 @@ def apply_age_to_record(
     record: Dict[str, Any],
     target_field: str,
     source_row: pd.Series,
-    age_params: Dict[str, Any],
-    custom_functions: Optional[Dict[str, Callable]] = None
+    age_params: Dict[str, Any]
 ) -> None:
     """
     Apply age calculation to a single record.
     
     Calculates age in days based on birth date and event date.
-    Supports custom birth date transformation functions.
     
     Args:
         record: Record dictionary to update (modified in place)
         target_field: Target field name
         source_row: Source data row
         age_params: Age calculation parameters (birth_date_field, event_date_field, etc.)
-        custom_functions: Optional dict of custom transformation functions
     """
-    birth_date = None
-    custom_functions = custom_functions or {}
-    
-    # Get birth date using transform function or direct field
-    birth_date_transform = age_params.get('birth_date_transform')
+
+    # Get parameters
     birth_date_field = age_params.get('birth_date_field')
-    
-    if birth_date_transform and birth_date_transform in custom_functions:
-        transform_func = custom_functions[birth_date_transform]
-        birth_date = transform_func(source_row, age_params)
-    elif birth_date_field:
-        birth_date = source_row.get(birth_date_field)
-    
-    # Get other parameters
     event_date_field = age_params.get('event_date_field')
     event_offset_field = age_params.get('event_offset_field')
     age_fallback_field = age_params.get('age_fallback_field')
     
+    birth_date = source_row.get(birth_date_field) if birth_date_field else None
     event_date = source_row.get(event_date_field) if event_date_field else None
     event_offset = source_row.get(event_offset_field) if event_offset_field else None
     age_years = source_row.get(age_fallback_field) if age_fallback_field else None
@@ -223,6 +210,11 @@ def apply_identifier_to_record(
             # Special case: use the actual source field name
             if source_field:
                 suffix_parts.append(str(source_field))
+        elif isinstance(field_or_value, str) and field_or_value.startswith('literal:'):
+            # Force literal string usage with 'literal:' prefix
+            # e.g., 'literal:SUBJECT_ID' uses the string 'SUBJECT_ID' not the field value
+            literal_value = field_or_value[8:]  # Remove 'literal:' prefix
+            suffix_parts.append(literal_value)
         elif field_or_value in source_row.index:
             # Field exists in source row - use its value
             value = source_row.get(field_or_value)

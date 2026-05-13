@@ -102,15 +102,20 @@ filters:
 # PREPROCESSING FILTERS
 # =============================================================================
 filters:
-  eligible_participants: true
-  participant_eligibility:
-    - field: consent
-      operator: equals
-      value: 1
-  include_rows:
-    baseline: true
-    repeat_instruments: []
-  field_filters:
-    - field: sample_id
-      operator: is_not_null
   participant_id_field: "participant_id"
+  
+  # Step 1: Participant eligibility
+  participant:
+    filter:
+      - field: consent
+        op: equals
+        value: 1
+      - field: sample_id
+        op: is_not_null
+  
+  # Step 2: Row selection
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null

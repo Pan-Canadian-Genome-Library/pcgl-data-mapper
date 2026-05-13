@@ -6,6 +6,17 @@
 entity:
   name: Participant
   
+  # Optional: Multi-file input support
+  # Uncomment and customize to load from specific CSV file(s)
+  # source_files:
+  #   primary: "demographics.csv"  # Main source file
+  #   # Optional: Join additional files if needed
+  #   # secondary:
+  #   #   - file: "consent.csv"
+  #   #     join_on: participant_id
+  #   #     join_type: left
+  #   #     columns: [consent_date, consent_version]
+  
   fields:
     base:
       - study_id

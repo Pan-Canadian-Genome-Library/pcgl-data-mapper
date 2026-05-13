@@ -18,6 +18,8 @@ import pandas as pd
 import yaml
 import importlib
 from datetime import datetime
+import fnmatch
+import re
 
 from .utils import (
     _map_field_value,
@@ -25,6 +27,8 @@ from .utils import (
     convert_nullable_int_columns,
     validate_participant_id,
     validate_age_in_days,
+    read_data_file,
+    safe_int_conversion
 )
 from .record_transforms import (
     apply_value_to_record,
@@ -103,24 +107,26 @@ class MappingConfig:
         self.entity_fields_by_schema = fields_config
         
         self.entity_pattern = entity_config.get('pattern', 'direct')
-        self.custom_function = entity_config.get('function')  # For custom pattern
         self.pattern_params = entity_config.get('params', {})  # For any pattern
         # Allow custom prefix for code/term fields (default to entity name)
         self.code_term_prefix = entity_config.get('code_term_prefix', self.entity_name.lower())
         
+        # Parse source_files configuration (for multi-file support)
+        self.source_files = self._parse_source_files(entity_config)
+        
         # Mappings are a list of field configs
-        self.mappings = config_dict.get('mappings', [])
+        self.mappings = config_dict.get('mappings', []) or []
         
         # Configs for checkbox expansion (comorbidity, phenotype, etc.)
         # Changed from dict to list format: configs is now a list with source_field property
-        self.configs = config_dict.get('configs', [])
+        # Support range expansion for repetitive configs
+        self.configs = self._expand_range_configs(config_dict.get('configs', []) or [])
         
-        # Common configuration fields
-        self.preprocessing = config_dict.get('preprocessing', [])
-        self.filters = config_dict.get('filters', {})
-        self.validations = config_dict.get('validations', [])
-        self.transformations = config_dict.get('transformations', {})
-        self.post_processing = config_dict.get('post_processing', [])
+        # Common configuration fields - handle None values when keys exist but are empty
+        self.preprocessing = config_dict.get('preprocessing', []) or []
+        self.filters = config_dict.get('filters', {}) or {}
+        self.validations = config_dict.get('validations', []) or []
+        self.post_processing = config_dict.get('post_processing', []) or []
         
     @classmethod
     def from_yaml(cls, yaml_path: Path) -> 'MappingConfig':
@@ -137,6 +143,203 @@ class MappingConfig:
             config_dict = yaml.safe_load(f)
         return cls(config_dict)
     
+    def _parse_source_files(self, entity_config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Parse source_files configuration from entity config.
+        
+        Supports multiple formats:
+        1. No config: None (backward compatible - uses default input)
+        2. Single string: source_file: "file.csv"
+        3. Named roles: source_files: {primary: "...", secondary: [...]}
+        
+        Args:
+            entity_config: Entity configuration dictionary
+            
+        Returns:
+            Parsed source files configuration or None
+        """
+        # Check for source_file (singular) - simple string format
+        source_file = entity_config.get('source_file')
+        if source_file:
+            if isinstance(source_file, str):
+                return {
+                    'primary': source_file,
+                    'secondary': []
+                }
+        
+        # Check for source_files (plural) - named roles or list format
+        source_files = entity_config.get('source_files')
+        if not source_files:
+            # No source files specified - backward compatible mode
+            return None
+        
+        # Handle named roles format
+        if isinstance(source_files, dict):
+            primary = source_files.get('primary')
+            secondary = source_files.get('secondary', [])
+            
+            if not primary:
+                raise ValueError(
+                    f"Entity '{entity_config.get('name')}': source_files must specify 'primary' file"
+                )
+            
+            # Normalize secondary to list format
+            if not isinstance(secondary, list):
+                secondary = [secondary] if secondary else []
+            
+            # Parse each secondary file configuration
+            parsed_secondary = []
+            for sec_file in secondary:
+                if isinstance(sec_file, str):
+                    # Simple string - use defaults
+                    parsed_secondary.append({
+                        'file': sec_file,
+                        'join_on': 'participant_id',  # Default join key
+                        'join_type': 'left',           # Default join type
+                        'columns': None                # Load all columns
+                    })
+                elif isinstance(sec_file, dict):
+                    # Full configuration object
+                    file_path = sec_file.get('file')
+                    if not file_path:
+                        raise ValueError(
+                            f"Entity '{entity_config.get('name')}': secondary file must specify 'file' path"
+                        )
+                    
+                    # file_path can be a string (single file) or list (multiple files to concatenate)
+                    # Validate that list elements are strings
+                    if isinstance(file_path, list):
+                        if not all(isinstance(f, str) for f in file_path):
+                            raise ValueError(
+                                f"Entity '{entity_config.get('name')}': when 'file' is a list, "
+                                f"all elements must be strings (file names)"
+                            )
+                    elif not isinstance(file_path, str):
+                        raise ValueError(
+                            f"Entity '{entity_config.get('name')}': 'file' must be a string or list of strings"
+                        )
+                    
+                    join_on = sec_file.get('join_on', 'participant_id')
+                    join_type = sec_file.get('join_type', 'left')
+                    columns = sec_file.get('columns')
+                    
+                    # Validate join_type
+                    valid_join_types = ['left', 'right', 'inner', 'outer']
+                    if join_type not in valid_join_types:
+                        raise ValueError(
+                            f"Entity '{entity_config.get('name')}': invalid join_type '{join_type}'. "
+                            f"Must be one of: {valid_join_types}"
+                        )
+                    
+                    parsed_secondary.append({
+                        'file': file_path,  # Can be string or list
+                        'join_on': join_on,
+                        'join_type': join_type,
+                        'columns': columns
+                    })
+                else:
+                    raise ValueError(
+                        f"Entity '{entity_config.get('name')}': secondary file must be string or dict, "
+                        f"got {type(sec_file).__name__}"
+                    )
+            
+            return {
+                'primary': primary,
+                'secondary': parsed_secondary
+            }
+        
+        raise ValueError(
+            f"Entity '{entity_config.get('name')}': source_files must be a dict with 'primary' and 'secondary' keys"
+        )
+    
+    def _expand_range_configs(self, configs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Expand range-based config templates into individual configs.
+        
+        Detects configs with range syntax and expands them:
+        - type: range (explicit) OR presence of start/end/template keys
+        - Replaces {n} placeholders in template with values from start to end
+        - Supports {n:02d} for zero-padded formatting
+        
+        Args:
+            configs: List of config dictionaries, may include range configs
+            
+        Returns:
+            Expanded list with range configs replaced by individual configs
+        """
+        if not configs:
+            return []
+        
+        expanded_configs = []
+        
+        for config in configs:
+            # Check if this is a range config
+            is_range = (
+                config.get('type') == 'range' or 
+                ('start' in config and 'end' in config and 'template' in config)
+            )
+            
+            if is_range:
+                # Extract range parameters
+                start = config.get('start')
+                end = config.get('end')
+                template = config.get('template')
+                
+                if not all([start is not None, end is not None, template is not None]):
+                    logger.warning(f"Incomplete range config, skipping: {config}")
+                    continue
+                
+                # Expand range
+                for n in range(start, end + 1):
+                    # Create a deep copy of the template
+                    expanded_config = self._substitute_placeholders(template, n)
+                    expanded_configs.append(expanded_config)
+            else:
+                # Regular config, add as-is
+                expanded_configs.append(config)
+        
+        return expanded_configs
+    
+    def _substitute_placeholders(self, obj: Any, n: int) -> Any:
+        """
+        Recursively substitute {n} placeholders in strings within a nested structure.
+        
+        Supports:
+        - {n} - replaced with the number
+        - {n:02d} - replaced with zero-padded number (e.g., 01, 02, ...)
+        - {n:03d} - 3-digit padding, etc.
+        
+        Args:
+            obj: Object to process (dict, list, str, or other)
+            n: Value to substitute for {n}
+            
+        Returns:
+            New object with placeholders substituted
+        """
+        if isinstance(obj, dict):
+            # Recursively process dictionary
+            return {k: self._substitute_placeholders(v, n) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            # Recursively process list
+            return [self._substitute_placeholders(item, n) for item in obj]
+        elif isinstance(obj, str):
+            # Substitute placeholders in string
+            # Support both {n} and {n:format} patterns
+            result = obj
+            # Replace formatted placeholders first (e.g., {n:02d})
+            import re
+            formatted_pattern = r'\{n:(\d+)d\}'
+            for match in re.finditer(formatted_pattern, result):
+                width = int(match.group(1))
+                formatted_value = str(n).zfill(width)
+                result = result.replace(match.group(0), formatted_value)
+            # Replace simple {n} placeholder
+            result = result.replace('{n}', str(n))
+            return result
+        else:
+            # Return as-is for other types
+            return obj
+    
 
 class EntityMapper:
     """
@@ -152,8 +355,7 @@ class EntityMapper:
     def __init__(
         self,
         config: MappingConfig,
-        study_id: str,
-        custom_functions: Optional[Dict[str, Callable]] = None
+        study_id: str
     ):
         """
         Initialize entity mapper.
@@ -161,11 +363,9 @@ class EntityMapper:
         Args:
             config: Mapping configuration
             study_id: Study identifier (e.g., 'HostSeq', 'BQC19')
-            custom_functions: Optional dictionary of custom transformation functions
         """
         self.config = config
         self.study_id = study_id
-        self.custom_functions = custom_functions or {}
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         
         # Cache for field descriptions (used in note aggregation)
@@ -218,7 +418,7 @@ class EntityMapper:
             return self._empty_dataframe()
         
         self.stats['filtered_records'] = len(preprocessed_df)
-        self.logger.info(f"Records after preprocessing: {self.stats['filtered_records']}")
+        self.logger.warning(f"Records after preprocessing: {self.stats['filtered_records']}")
         
         # 2. Map fields
         mapped_df = self.map_fields(preprocessed_df, **kwargs)
@@ -247,16 +447,81 @@ class EntityMapper:
         
         return final_df
     
+    def _construct_date_from_components(
+        self,
+        row: pd.Series,
+        df: pd.DataFrame,
+        year_field: str,
+        month_field: str,
+        day_field: Optional[str],
+        default_day: int
+    ) -> Optional[str]:
+        """
+        Construct date string from year/month/day components.
+        
+        Uses safe_int_conversion for robust parsing (handles "2,019", spaces, etc.).
+        
+        Args:
+            row: DataFrame row
+            df: Full DataFrame (for column checks)
+            year_field: Name of year field (required)
+            month_field: Name of month field (required)
+            day_field: Name of day field (optional)
+            default_day: Default day if not provided
+            
+        Returns:
+            Date string in YYYY-MM-DD format, or None if invalid
+        """
+        
+        # Year is required
+        year = row.get(year_field)
+        if pd.isna(year):
+            return None
+        
+        year_val = safe_int_conversion(year)
+        if not year_val:
+            return None
+        
+        # Month is required
+        month = row.get(month_field)
+        if pd.isna(month):
+            return None
+        
+        month_val = safe_int_conversion(month)
+        if not month_val:
+            return None
+        
+        # Get day (use default if not provided or field missing)
+        if day_field and day_field in df.columns:
+            day = row.get(day_field)
+            if pd.notna(day):
+                day_val = safe_int_conversion(day)
+            else:
+                day_val = default_day
+        else:
+            day_val = default_day
+        
+        if not day_val:
+            return None
+        
+        # Validate ranges
+        if not (1 <= month_val <= 12):
+            return None
+        if not (1 <= day_val <= 31):
+            return None
+        
+        # Format as YYYY-MM-DD
+        return f"{year_val}-{month_val:02d}-{day_val:02d}"
+    
     def preprocess(self, source_df: pd.DataFrame, **kwargs) -> pd.DataFrame:
         """
         Preprocess source data before mapping.
         
-        Applies preprocessing steps from YAML configuration:
-        - clean_numeric: Remove commas, spaces from numeric fields
-        - strip_whitespace: Remove leading/trailing whitespace
-        - uppercase/lowercase: Convert text case
-        - field_filters: Filter rows based on field values
-        - REDCap filtering: Handle baseline/repeat instruments (auto-detected)
+        Processing order (optimized for efficiency):
+        1. Apply participant filters (on raw data)
+        2. Enrichment - merge from full dataset before row selection
+        3. Apply row selection (select latest/first/etc per participant)
+        4. Clean and generate fields (preprocessing)
         
         Override this method to add entity-specific or study-specific preprocessing.
         
@@ -269,14 +534,87 @@ class EntityMapper:
         """
         df = source_df.copy()
         
-        # Apply preprocessing steps from configuration
+        # ====================================================================
+        # STEP 1: Apply participant filters (on raw data)
+        # ====================================================================
+        # Apply new unified filter structure
+        filters_config = self.config.filters
+        participant_id_field = filters_config.get('participant_id_field', 'participant_id')
+        
+        # 1. Identify eligible participants
+        # Start with all participants, then apply filter if configured
+        if participant_id_field in df.columns:
+            eligible_participant_ids = set(df[participant_id_field].unique())
+            
+            participant_filter = filters_config.get('participant', {}).get('filter') if filters_config.get('participant') else None
+            if participant_filter:
+                eligible_participant_ids = self._get_eligible_participants(df, participant_filter)
+                
+                # Check if all participants were excluded
+                if not eligible_participant_ids:
+                    self.logger.warning("No eligible participants after applying participant filter")
+                    return pd.DataFrame(columns=df.columns)
+                
+                # Filter to eligible participants only (keep all their rows for enrichment)
+                df = df[df[participant_id_field].isin(eligible_participant_ids)].copy()
+                self.logger.warning(f"Filtered to {len(eligible_participant_ids)} eligible participants")
+        else:
+            # Participant ID field not found - warn but continue without participant filtering
+            if filters_config.get('participant') or filters_config.get('rows'):
+                self.logger.warning(
+                    f"Participant ID field '{participant_id_field}' not found in data. "
+                    f"Participant/row filtering will be skipped."
+                )
+            eligible_participant_ids = None
+        
+        # ====================================================================
+        # STEP 2: Enrichment - Merge fields from full dataset BEFORE row selection
+        # This is critical: we need all rows (baseline, follow-ups) available
+        # to merge from, before we select the final row per participant
+        # ====================================================================
+        enrich_config = filters_config.get('enrich') or []
+        
+        # Unified list format
+        if isinstance(enrich_config, list):
+            for merge_config in enrich_config:
+                if not merge_config:
+                    continue
+                
+                merge_name = merge_config.get('name', 'unnamed')
+                fields_to_merge = merge_config.get('fields', [])
+                source_filter = merge_config.get('source', [])
+                select_mode = merge_config.get('select', 'first')  # 'first', 'last', or 'all'
+                
+                if not source_filter or not fields_to_merge:
+                    self.logger.warning(f"Enrichment '{merge_name}' missing 'source' or 'fields', skipping")
+                    continue
+                
+                # Apply filter to get source rows from full dataset
+                source_df, _, source_count = self._apply_filters(df, source_filter, "enrichment")
+                
+                if source_count > 0:
+                    df = self._merge_fields_from_source(df, source_df, participant_id_field, fields_to_merge, merge_name, select_mode)
+                else:
+                    self.logger.warning(f"Enrichment '{merge_name}': no matching source rows")
+                
+        # ====================================================================
+        # STEP 3: Apply row selection (AFTER enrichment)
+        # Now that all rows have been enriched with merged fields,
+        # we can safely select specific rows per participant
+        # ====================================================================
+        rows_config = filters_config.get('rows', [])
+        if rows_config:
+            df = self._apply_row_selectors(df, rows_config, eligible_participant_ids)
+                    
+        # ====================================================================
+        # STEP 4: Clean and generate fields (preprocessing on selected rows)
+        # ====================================================================
         for step in self.config.preprocessing:
             step_type = step.get('type')
             fields = step.get('fields', [])
             
             if step_type == 'clean_numeric':
                 # Remove commas, spaces from numeric fields
-                # Support field patterns (e.g., '*_numeric', 'measurement_*')
                 fields_to_clean = self._resolve_field_patterns(df, fields)
                 
                 for field in fields_to_clean:
@@ -310,20 +648,252 @@ class EntityMapper:
                         df[field] = df[field].astype(str).str.lower()
                         self.logger.debug(f"Converted to lowercase: {field}")
             
+            elif step_type == 'replace_missing_codes':
+                # Replace missing data codes with numeric values or NaN, and convert column to numeric
+                missing_codes = step.get('codes', {})  # Dict mapping codes to replacement values, or list of codes to replace with NaN
+                
+                # Support both dict (code → value) and list (codes → NaN) formats
+                if isinstance(missing_codes, list):
+                    # List format: replace all codes with NaN
+                    code_mappings = {code: None for code in missing_codes}
+                else:
+                    # Dict format: explicit code → value mappings
+                    code_mappings = missing_codes
+                
+                # If fields is empty or not provided, apply to all columns
+                if not fields:
+                    fields_to_process = df.columns.tolist()
+                    self.logger.info(f"No fields specified, applying to all {len(fields_to_process)} columns")
+                else:
+                    fields_to_process = fields
+                
+                for field in fields_to_process:
+                    if field in df.columns:
+                        # Replace missing codes with numeric values (or NaN)
+                        df[field] = df[field].replace(code_mappings)
+                        
+                        # Convert to numeric (coerce any remaining non-numeric to NaN)
+                        df[field] = pd.to_numeric(df[field], errors='coerce')
+                        
+                        self.logger.debug(f"Replaced codes and converted to numeric: {field} (dtype={df[field].dtype})")
+                
+                if fields_to_process:
+                    self.logger.info(f"Replaced missing codes and converted {len(fields_to_process)} fields to numeric: {code_mappings}")
+            
+            elif step_type == 'convert_to_numeric':
+                # Convert string columns to numeric after replacing missing codes
+                # Handles: "1" → 1 or 1.0, "MSK" (if not replaced) → NaN
+                errors = step.get('errors', 'coerce')  # 'coerce' converts non-numeric to NaN
+                downcast = step.get('downcast')  # Optional: 'integer', 'signed', 'unsigned', 'float'
+                
+                for field in fields:
+                    if field in df.columns:
+                        df[field] = pd.to_numeric(df[field], errors=errors, downcast=downcast)
+                        self.logger.debug(f"Converted to numeric: {field} (dtype={df[field].dtype})")
+                
+                if fields:
+                    self.logger.info(f"Converted {len(fields)} fields to numeric")
+            
+            elif step_type == 'calculate_field':
+                # Calculate new field using pandas eval() with formula
+                target = step.get('target')
+                formula = step.get('formula')
+                
+                if not target or not formula:
+                    self.logger.warning(f"Skipping incomplete calculate_field: missing 'target' or 'formula'")
+                    continue
+                
+                try:
+                    df[target] = df.eval(formula)
+                    self.logger.info(f"Calculated field '{target}' using formula: {formula}")
+                        
+                except Exception as e:
+                    self.logger.error(
+                        f"Error calculating field '{target}' with formula '{formula}': {e}\n"
+                        f"Hint: Ensure all column names in the formula exist in the data. "
+                        f"Use column.fillna(0) to handle nulls, or allow NaN propagation (default)."
+                    )
+                    raise ValueError(
+                        f"Invalid calculate_field formula for '{target}': {formula}\n"
+                        f"Error: {e}"
+                    ) from e
+            
+            elif step_type == 'construct_date':
+                # Construct date from year/month/day components
+                target = step.get('target')
+                params = step.get('params', {})
+                
+                if not target:
+                    continue
+                
+                year_field = params.get('year_field')
+                month_field = params.get('month_field')
+                day_field = params.get('day_field')
+                default_day = params.get('default_day', 15)
+                
+                if not year_field or not month_field:
+                    continue
+                
+                try:
+                    df[target] = df.apply(
+                        lambda row: self._construct_date_from_components(row, df, year_field, month_field, day_field, default_day),
+                        axis=1
+                    )
+                    
+                    fields_desc = [year_field, month_field]
+                    if day_field:
+                        fields_desc.append(day_field)
+                    self.logger.info(f"Constructed date field '{target}' from {', '.join(fields_desc)}")
+                    
+                except Exception as e:
+                    self.logger.error(f"Error constructing date field '{target}': {e}")
+                    raise ValueError(f"Invalid construct_date configuration for '{target}': {e}") from e
+            
             else:
                 self.logger.warning(f"Unknown preprocessing type: {step_type}")
         
-        # Apply field-based filters from configuration
-        field_filters = self.config.filters.get('field_filters', [])
-        if field_filters:
-            df = self._apply_field_filters(df, field_filters)
-        
-        # Apply REDCap baseline/repeat instrument filtering
-        include_rows = self.config.filters.get('include_rows')
-        if include_rows:
-            df = self._apply_redcap_filtering(df)
-        
         return df
+    
+    def _get_eligible_participants(self, df: pd.DataFrame, participant_filter: List[Dict[str, Any]]) -> set:
+        """
+        Identify eligible participants based on filter criteria.
+        
+        Applies filters.participant.filter from YAML configuration to the dataset
+        and returns a deduplicated set of participant IDs from matching rows.
+        
+        Note: For REDCap data, only rows with the filter fields (typically baseline)
+        will match, naturally limiting evaluation to relevant rows.
+        
+        Args:
+            df: DataFrame to evaluate
+            participant_filter: List of filter configurations
+            
+        Returns:
+            Set of eligible participant IDs
+        """
+        self.logger.info("Identifying eligible participants")
+        
+        participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
+        
+        if participant_id_field not in df.columns:
+            self.logger.warning(f"Participant ID field '{participant_id_field}' not found in data")
+            return set()
+        
+        initial_participants = df[participant_id_field].nunique()
+        all_participant_ids = set(df[participant_id_field].unique())
+        
+        # Apply filter to all rows - rows without filter fields will be naturally excluded
+        filtered_df, _, _ = self._apply_filters(df, participant_filter, "participant")
+        eligible_participant_ids = set(filtered_df[participant_id_field].unique())
+        final_participants = len(eligible_participant_ids)
+        
+        excluded_participants = initial_participants - final_participants
+        if excluded_participants > 0:
+            excluded_ids = sorted([str(x) for x in (all_participant_ids - eligible_participant_ids)])
+            retention_rate = 100 * final_participants / initial_participants if initial_participants > 0 else 0
+            self.logger.info(
+                f"Participant eligibility: {initial_participants} → {final_participants} participants "
+                f"(excluded {excluded_participants}, retention {retention_rate:.1f}%)"
+            )
+            if excluded_ids:
+                self.logger.warning(f"Excluded participant IDs: {excluded_ids}")
+        
+        return eligible_participant_ids
+    
+    def _apply_row_selectors(
+        self, 
+        df: pd.DataFrame, 
+        rows_config: List[Dict[str, Any]], 
+        eligible_participant_ids: Optional[set] = None
+    ) -> pd.DataFrame:
+        """
+        Apply row selection filtering based on filters.rows configuration.
+        
+        Each row selector has a name and filter conditions.
+        All matching rows from all selectors are included (union).
+        
+        Supports 'select' parameter:
+        - 'all': Include all matching rows (default)
+        - 'first': Take first row per participant (ordered by appearance)
+        - 'last': Take last row per participant (ordered by appearance)
+        
+        If eligible_participant_ids is provided, only rows for those participants are included.
+        
+        Args:
+            df: DataFrame to filter
+            rows_config: List of row selector configurations
+            eligible_participant_ids: Optional set of eligible participant IDs to filter to
+            
+        Returns:
+            DataFrame with selected rows
+        """
+        if not rows_config:
+            return df
+        
+        self.logger.info(f"Applying {len(rows_config)} row selector(s)")
+        
+        participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
+        all_selected_rows = []
+        
+        for row_selector in rows_config:
+            selector_name = row_selector.get('name', 'unnamed')
+            row_filter = row_selector.get('filter', [])
+            select_mode = row_selector.get('select', 'all')  # 'all', 'first', 'last'
+            
+            if not row_filter:
+                self.logger.warning(f"Row selector '{selector_name}' has no filter, skipping")
+                continue
+            
+            # Apply filter for this selector
+            selected_df, initial_count, final_count = self._apply_filters(df, row_filter, "row")
+            
+            if final_count == 0:
+                self.logger.warning(f"Row selector '{selector_name}': no matching rows")
+                continue
+            
+            # Apply selection strategy
+            if select_mode != 'all' and participant_id_field in selected_df.columns:
+                before_selection = len(selected_df)
+                
+                if select_mode == 'first':
+                    selected_df = selected_df.groupby(participant_id_field, as_index=False, sort=False).first()
+                elif select_mode == 'last':
+                    selected_df = selected_df.groupby(participant_id_field, as_index=False, sort=False).last()
+                else:
+                    self.logger.warning(f"Unknown select mode '{select_mode}', using 'all'")
+                
+                after_selection = len(selected_df)
+                self.logger.info(
+                    f"Row selector '{selector_name}': {before_selection} → {after_selection} rows "
+                    f"(select={select_mode})"
+                )                
+            else:
+                self.logger.info(f"Row selector '{selector_name}': selected {final_count} rows")
+                            
+            all_selected_rows.append(selected_df)
+        
+        if not all_selected_rows:
+            self.logger.warning("No rows matched any selector")
+            return pd.DataFrame(columns=df.columns)
+        
+        # Combine all selected rows (union)
+        result_df = pd.concat(all_selected_rows, ignore_index=True).drop_duplicates()
+        self.logger.info(f"Total rows after row selection: {len(result_df)} (from {len(df)} input rows)")
+                
+        # Filter to eligible participants if provided
+        if eligible_participant_ids is not None:
+            if participant_id_field in result_df.columns:
+                before_count = len(result_df)
+                result_df = result_df[result_df[participant_id_field].isin(eligible_participant_ids)].copy()
+                after_count = len(result_df)
+                
+                if before_count != after_count:
+                    self.logger.info(
+                        f"Filtered to {len(eligible_participant_ids)} eligible participants: "
+                        f"{before_count} → {after_count} rows"
+                    )
+        
+        return result_df
     
     def _resolve_field_patterns(self, df: pd.DataFrame, field_patterns: list) -> list:
         """
@@ -341,7 +911,6 @@ class EntityMapper:
         Returns:
             List of actual column names that match the patterns
         """
-        import fnmatch
         
         if not field_patterns:
             return []
@@ -373,186 +942,6 @@ class EntityMapper:
         
         return matched_fields
     
-    def _apply_redcap_filtering(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Apply REDCap baseline/repeat instrument filtering.
-        
-        Universal REDCap pattern that works for any study using REDCap.
-        Auto-detects REDCap structure and applies include_rows configuration.
-        
-        Configuration (YAML filters section):
-        ```yaml
-        filters:
-          eligible_participants: true  # Optional: triggers study-specific filtering
-          include_rows:
-            baseline: true
-            repeat_instruments: ["lab_results", "visits"]
-          merge_baseline_fields: ["dob_year", "sex"]
-          participant_id_field: "participant_id"
-        ```
-        
-        Args:
-            df: DataFrame to filter
-            
-        Returns:
-            Filtered DataFrame
-        """
-        # Check if this is REDCap data
-        is_redcap = 'redcap_repeat_instrument' in df.columns
-        
-        # Get configuration
-        participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
-        include_rows = self.config.filters.get('include_rows', {})
-        merge_fields = self.config.filters.get('merge_baseline_fields', [])
-        
-        # STEP 1: Handle non-REDCap data
-        if not is_redcap:
-            # For non-REDCap data, just apply eligibility filter if configured
-            if self.config.filters.get('eligible_participants', False):
-                self.logger.info("Applying participant eligibility filtering (non-REDCap)")
-                return self._filter_eligible_participants(df)
-            return df
-        
-        # STEP 2: Extract baseline rows
-        baseline_df = df[df['redcap_repeat_instrument'].isna()].copy()
-        self.logger.info(f"Found {len(baseline_df)} baseline records")
-        
-        # STEP 3: Apply eligibility filtering to baseline
-        if self.config.filters.get('eligible_participants', False):
-            self.logger.info("Applying participant eligibility filtering")
-            eligible_baseline = self._filter_eligible_participants(baseline_df)
-            eligible_ids = set(eligible_baseline[participant_id_field].unique())
-            self.logger.info(f"Found {len(eligible_ids)} eligible participants")
-        else:
-            eligible_baseline = baseline_df
-            eligible_ids = set(baseline_df[participant_id_field].unique())
-            self.logger.info(f"All {len(eligible_ids)} participants included (no eligibility filter)")
-        
-        # STEP 4: Include specified rows based on configuration
-        include_baseline = include_rows.get('baseline', True)
-        repeat_instruments = include_rows.get('repeat_instruments', [])
-        
-        rows_to_include = []
-        
-        # Include baseline rows for eligible participants
-        if include_baseline:
-            rows_to_include.append(eligible_baseline)
-            self.logger.info(f"Including {len(eligible_baseline)} baseline rows")
-        
-        # Include repeat instrument rows for eligible participants
-        if repeat_instruments:
-            for instrument in repeat_instruments:
-                instrument_rows = df[
-                    (df['redcap_repeat_instrument'] == instrument) &
-                    (df[participant_id_field].isin(eligible_ids))
-                ].copy()
-                rows_to_include.append(instrument_rows)
-                self.logger.info(f"Including {len(instrument_rows)} '{instrument}' repeat rows")
-        
-        if not rows_to_include:
-            self.logger.warning("No rows to include based on configuration")
-            return pd.DataFrame(columns=df.columns)
-        
-        # Combine all included rows
-        filtered_df = pd.concat(rows_to_include, ignore_index=True)
-        self.logger.info(f"Total rows after REDCap filtering: {len(filtered_df)}")
-        
-        # STEP 5: Merge baseline fields into repeat rows if needed
-        if merge_fields and repeat_instruments:
-            filtered_df = self._merge_baseline_fields(
-                filtered_df, 
-                eligible_baseline, 
-                participant_id_field, 
-                merge_fields
-            )
-        
-        return filtered_df
-    
-    def _filter_eligible_participants(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Filter for eligible participants based on study-specific criteria.
-        
-        Supports two patterns:
-        1. YAML Configuration (Simple): Define filters.participant_eligibility in YAML
-        2. Method Override (Complex): Override this method in study-specific mapper
-        
-        YAML Pattern (for simple AND-combined conditions):
-        ```yaml
-        filters:
-          eligible_participants: true
-          participant_eligibility:
-            - field: consent
-              operator: equals
-              value: 1
-            - field: age_years
-              operator: greater_equal
-              value: 18
-            - field: enrollment_status
-              operator: in
-              value: ["Active", "Complete"]
-        ```
-        
-        Override Pattern (for complex logic like HostSeq):
-        ```python
-        def _filter_eligible_participants(self, df: pd.DataFrame) -> pd.DataFrame:
-            # Complex multi-field logic with OR conditions, nested AND/OR, etc.
-            consent_mask = (df['consent'] == 0) | (df['consent'].isna())
-            covid_mask = (df['suspected'] == 1) & ((df['test'] == 0) | (df['test'] == 2))
-            return df[~(consent_mask | covid_mask)].copy()
-        ```
-        
-        Args:
-            df: DataFrame to filter (usually baseline records for REDCap)
-            
-        Returns:
-            Filtered DataFrame with only eligible participants
-        """
-        # Check if YAML eligibility conditions are configured
-        participant_eligibility = self.config.filters.get('participant_eligibility')
-        
-        if participant_eligibility:
-            # Use YAML-based filtering
-            self.logger.info("Applying YAML-configured participant eligibility filters")
-            return self._apply_participant_eligibility_filters(df, participant_eligibility)
-        
-        # No YAML config - use default or override behavior
-        # If this method is overridden in subclass, the override will run
-        # Otherwise, return all participants (default stub behavior)
-        self.logger.debug("Using default eligibility filter (no exclusions)")
-        return df
-    
-    def _apply_participant_eligibility_filters(
-        self,
-        df: pd.DataFrame,
-        eligibility_conditions: List[Dict[str, Any]]
-    ) -> pd.DataFrame:
-        """
-        Apply YAML-configured participant eligibility filters.
-        
-        Uses same operators as field_filters for consistency.
-        See _apply_filters() for supported operators.
-        
-        Args:
-            df: DataFrame to filter
-            eligibility_conditions: List of filter configurations from YAML
-            
-        Returns:
-            Filtered DataFrame
-        """
-        filtered_df, initial_count, final_count = self._apply_filters(
-            df, eligibility_conditions, "eligibility"
-        )
-        
-        total_excluded = initial_count - final_count
-        if total_excluded > 0:
-            retention_rate = 100 * final_count / initial_count if initial_count > 0 else 0
-            self.logger.info(
-                f"Participant eligibility complete: {initial_count} → {final_count} participants "
-                f"(excluded {total_excluded}, retention {retention_rate:.1f}%)"
-            )
-        
-        return filtered_df
-    
     def _apply_filters(
         self,
         df: pd.DataFrame,
@@ -560,9 +949,14 @@ class EntityMapper:
         filter_type: str = "field"
     ) -> tuple:
         """
-        Apply filtering conditions to DataFrame (shared logic for field and eligibility filters).
+        Apply filtering conditions to DataFrame with support for any/all boolean logic.
         
-        All filters are combined with AND logic.
+        Filter Structure:
+        - Simple conditions: [{"field": "consent", "op": "equals", "value": 1}]
+        - AND logic (default): All conditions at same level must be true
+        - OR logic: {"any": [condition1, condition2, ...]} - any condition can be true
+        - AND logic (explicit): {"all": [condition1, condition2, ...]} - all conditions must be true
+        - Nesting: any/all can be nested arbitrarily deep
         
         Supported operators:
         - equals, not_equals: Field equals/doesn't equal value
@@ -575,7 +969,7 @@ class EntityMapper:
         Args:
             df: DataFrame to filter
             filters: List of filter configurations
-            filter_type: Type of filter for logging ("field" or "eligibility")
+            filter_type: Type of filter for logging ("field", "eligibility", or "participant")
             
         Returns:
             Tuple of (filtered_df, initial_count, final_count)
@@ -583,66 +977,161 @@ class EntityMapper:
         initial_count = len(df)
         
         for filter_config in filters:
-            field = filter_config.get('field')
-            operator = filter_config.get('operator')
-            value = filter_config.get('value')
-            
-            if not field or not operator:
-                self.logger.warning(f"Skipping incomplete {filter_type} filter: {filter_config}")
-                continue
-            
-            if field not in df.columns:
-                self.logger.warning(f"{filter_type.capitalize()} field '{field}' not found, skipping")
-                continue
-            
-            before_count = len(df)
-            
-            # Apply filter based on operator (no .copy() needed in loop)
-            if operator == 'equals':
-                df = df[df[field] == value]
-            elif operator == 'not_equals':
-                df = df[df[field] != value]
-            elif operator == 'in':
-                df = df[df[field].isin(value)]
-            elif operator == 'not_in':
-                df = df[~df[field].isin(value)]
-            elif operator == 'is_not_null':
-                df = df[df[field].notna()]
-            elif operator == 'is_null':
-                df = df[df[field].isna()]
-            elif operator == 'greater_than':
-                df = df[df[field] > value]
-            elif operator == 'less_than':
-                df = df[df[field] < value]
-            elif operator == 'greater_equal':
-                df = df[df[field] >= value]
-            elif operator == 'less_equal':
-                df = df[df[field] <= value]
-            elif operator == 'regex_match_any':
-                # Match records where field matches any of the regex patterns
-                import re
-                if isinstance(value, list):
-                    df = df[df[field].astype(str).apply(
-                        lambda x: any(re.match(pattern, str(x)) for pattern in value)
-                    )]
-                else:
-                    self.logger.warning(f"regex_match_any expects a list of patterns, got {type(value)}")
-                    continue
+            # Check for any/all boolean logic
+            if 'any' in filter_config:
+                # OR logic - collect indices matching any condition
+                df = self._apply_any_filters(df, filter_config['any'], filter_type)
+            elif 'all' in filter_config:
+                # Explicit AND logic - recursively apply
+                df, _, _ = self._apply_filters(df, filter_config['all'], filter_type)
             else:
-                self.logger.warning(f"Unknown operator '{operator}', skipping")
-                continue
-            
-            after_count = len(df)
-            excluded = before_count - after_count
-            if excluded > 0:
-                label = "Eligibility filter" if filter_type == "eligibility" else "Field filter"
-                self.logger.info(
-                    f"{label}: {field} {operator} {value} "
-                    f"({before_count} → {after_count}, excluded {excluded})"
-                )
+                # Single condition
+                df = self._apply_single_filter(df, filter_config, filter_type)
         
         # Single copy at the end
         return df.copy(), initial_count, len(df)
+    
+    def _apply_single_filter(
+        self,
+        df: pd.DataFrame,
+        filter_config: Dict[str, Any],
+        filter_type: str = "field"
+    ) -> pd.DataFrame:
+        """
+        Apply a single filter condition to DataFrame.
+        
+        This method contains the actual operator logic and is called by both
+        _apply_filters (AND logic) and _apply_any_filters (OR logic).
+        
+        Args:
+            df: DataFrame to filter
+            filter_config: Single filter configuration dict
+            filter_type: Type of filter for logging
+            
+        Returns:
+            Filtered DataFrame (not copied - caller handles that)
+        """
+        field = filter_config.get('field')
+        operator = filter_config.get('operator') or filter_config.get('op')
+        value = filter_config.get('value')
+        
+        if not field or not operator:
+            self.logger.warning(f"Skipping incomplete {filter_type} filter: {filter_config}")
+            return df
+        
+        if field not in df.columns:
+            self.logger.warning(f"{filter_type.capitalize()} field '{field}' not found, skipping")
+            return df
+        
+        before_count = len(df)
+        
+        # Apply filter based on operator (no .copy() needed in loop)
+        if operator == 'equals':
+            df = df[df[field] == value]
+        elif operator == 'not_equals':
+            df = df[df[field] != value]
+        elif operator == 'in':
+            df = df[df[field].isin(value)]
+        elif operator == 'not_in':
+            df = df[~df[field].isin(value)]
+        elif operator == 'is_not_null':
+            df = df[df[field].notna()]
+        elif operator == 'is_null':
+            df = df[df[field].isna()]
+        elif operator == 'greater_than':
+            df = df[df[field] > value]
+        elif operator == 'less_than':
+            df = df[df[field] < value]
+        elif operator == 'greater_equal':
+            df = df[df[field] >= value]
+        elif operator == 'less_equal':
+            df = df[df[field] <= value]
+        elif operator == 'regex_match_any':
+            # Match records where field matches any of the regex patterns
+            if isinstance(value, list):
+                try:
+                    df = df[df[field].astype(str).apply(
+                        lambda x: any(re.match(pattern, str(x)) for pattern in value)
+                    )]
+                except re.error as e:
+                    self.logger.error(
+                        f"Invalid regex pattern in {filter_type} filter for field '{field}': {e}\n"
+                        f"Patterns: {value}\n"
+                        f"Hint: Special regex characters like *, +, ?, etc. need to be escaped or used correctly."
+                    )
+                    raise ValueError(
+                        f"Invalid regex pattern in field '{field}': {e}. "
+                        f"Check your filter configuration for special characters that need escaping."
+                    ) from e
+            else:
+                self.logger.warning(f"regex_match_any expects a list of patterns, got {type(value)}")
+                return df
+        else:
+            self.logger.warning(f"Unknown operator '{operator}', skipping")
+            return df
+        
+        after_count = len(df)
+        excluded = before_count - after_count
+        if excluded > 0:
+            label_map = {"eligibility": "Eligibility filter", "participant": "Participant filter", "field": "Field filter"}
+            label = label_map.get(filter_type, "Filter")
+            self.logger.info(
+                f"{label}: {field} {operator} {value} "
+                f"({before_count} → {after_count}, excluded {excluded})"
+            )
+        
+        return df
+    
+    def _apply_any_filters(
+        self,
+        df: pd.DataFrame,
+        filters: List[Dict[str, Any]],
+        filter_type: str = "field"
+    ) -> pd.DataFrame:
+        """
+        Apply OR logic to a list of filter conditions.
+        
+        Returns rows that match ANY of the conditions (union of all matching rows).
+        Supports nested any/all logic recursively.
+        
+        Args:
+            df: DataFrame to filter
+            filters: List of filter configurations (OR combined)
+            filter_type: Type of filter for logging
+            
+        Returns:
+            DataFrame with rows matching any condition (not copied - caller handles that)
+        """
+        if not filters:
+            return df
+        
+        # Collect indices that match any condition
+        matching_indices = set()
+        
+        for filter_config in filters:
+            # Check for nested any/all
+            if 'any' in filter_config:
+                # Nested OR - recursively apply
+                temp_df = self._apply_any_filters(df, filter_config['any'], filter_type)
+                matching_indices.update(temp_df.index)
+            elif 'all' in filter_config:
+                # Nested AND - recursively apply
+                temp_df, _, _ = self._apply_filters(df, filter_config['all'], filter_type)
+                matching_indices.update(temp_df.index)
+            else:
+                # Single condition - apply and collect matching indices
+                temp_df = self._apply_single_filter(df.copy(), filter_config, filter_type)
+                matching_indices.update(temp_df.index)
+        
+        # Return rows matching any condition
+        result_df = df.loc[list(matching_indices)]
+        
+        before_count = len(df)
+        after_count = len(result_df)
+        if before_count != after_count:
+            self.logger.warning(f"OR filter: {before_count} → {after_count} rows (matched {after_count})")
+        
+        return result_df
     
     def _apply_field_filters(self, df: pd.DataFrame, field_filters: list) -> pd.DataFrame:
         """
@@ -739,6 +1228,76 @@ class EntityMapper:
         
         return df
     
+    def _merge_fields_from_source(
+        self,
+        df: pd.DataFrame,
+        source_df: pd.DataFrame,
+        participant_id_field: str,
+        fields_to_merge: list,
+        merge_name: str = "enrichment",
+        select_mode: str = "first"
+    ) -> pd.DataFrame:
+        """
+        Merge specified fields from source rows into main DataFrame.
+        
+        Generic enrichment method that merges fields from filtered source rows
+        (e.g., death records, baseline, specific events) into the main dataset.
+        
+        Args:
+            df: Main DataFrame
+            source_df: Filtered source DataFrame with rows to merge from
+            participant_id_field: Field name for participant ID
+            fields_to_merge: List of field names to merge
+            merge_name: Name for logging purposes
+            select_mode: How to select from multiple source rows per participant ('first', 'last')
+            
+        Returns:
+            DataFrame with fields merged in
+        """
+        if participant_id_field not in source_df.columns:
+            self.logger.warning(f"Merge '{merge_name}': participant_id_field '{participant_id_field}' not in source")
+            return df
+        
+        # Select only needed fields from source
+        merge_fields = [participant_id_field] + fields_to_merge
+        existing_fields = [f for f in merge_fields if f in source_df.columns]
+        missing_fields = [f for f in fields_to_merge if f not in source_df.columns]
+        
+        if missing_fields:
+            self.logger.warning(f"Merge '{merge_name}': fields not found in source: {missing_fields}")
+        
+        if len(existing_fields) <= 1:
+            self.logger.warning(f"Merge '{merge_name}': no fields to merge")
+            return df
+        
+        # Get unique source records (one per participant)
+        if select_mode == 'last':
+            source_subset = source_df[existing_fields].groupby(participant_id_field, as_index=False).last()
+        else:  # 'first' or default
+            source_subset = source_df[existing_fields].groupby(participant_id_field, as_index=False).first()
+        
+        self.logger.info(
+            f"Merge '{merge_name}': merging {len(existing_fields)-1} fields from "
+            f"{len(source_subset)} participant(s)"
+        )
+        
+        # Merge into main DataFrame
+        df = df.merge(
+            source_subset,
+            on=participant_id_field,
+            how='left',
+            suffixes=('', f'_{merge_name}')
+        )
+        
+        # Handle conflicts: prefer merged values if original was null
+        for field in fields_to_merge:
+            merged_col = f"{field}_{merge_name}"
+            if field in df.columns and merged_col in df.columns:
+                df[field] = df[field].fillna(df[merged_col])
+                df = df.drop(columns=[merged_col])
+        
+        return df
+    
     def map_fields(self, source_df: pd.DataFrame, **kwargs) -> pd.DataFrame:
         """
         Map source fields to target schema fields using configuration.
@@ -746,22 +1305,18 @@ class EntityMapper:
         This method checks entity.pattern to determine mapping strategy:
         - 'direct': One-to-one mapping (one output record per input record)
         - 'expansion': Wide-to-long mapping (multiple output records per input record)
-        - 'custom': Custom transformation logic via entity.function
         
         Args:
             source_df: Preprocessed source DataFrame
             **kwargs: Additional arguments
             
         Returns:
-            DataFrame with mapped fields (direct, expanded, or custom)
+            DataFrame with mapped fields (direct, or expanded)
         """
         # Check entity pattern to determine mapping strategy
         if self.config.entity_pattern == 'expansion':
             # Use expansion pattern: wide-to-long conversion
             return self._map_expansion_pattern(source_df, **kwargs)
-        elif self.config.entity_pattern == 'custom':
-            # Use custom pattern: user-defined transformation
-            return self._map_custom_pattern(source_df, **kwargs)
         else:
             # Use direct pattern: one-to-one mapping
             return self._map_direct_pattern(source_df, **kwargs)
@@ -883,43 +1438,7 @@ class EntityMapper:
         
         return pd.DataFrame(expanded_records)
     
-    def _map_custom_pattern(self, source_df: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        """
-        Map using custom pattern (user-defined transformation).
-        
-        Calls a custom expansion function from CUSTOM_FUNCTIONS to perform
-        arbitrary transformations. Use for complex wide-to-long conversions
-        that don't fit the standard checkbox expansion pattern.
-        
-        Args:
-            source_df: Source DataFrame
-            **kwargs: Additional arguments
-            
-        Returns:
-            DataFrame returned by custom function
-        """
-        if not self.config.custom_function:
-            raise ValueError(
-                f"Pattern 'custom' requires 'function' to be specified in entity config"
-            )
-        
-        if self.config.custom_function not in self.custom_functions:
-            raise ValueError(
-                f"Custom function '{self.config.custom_function}' not found in CUSTOM_FUNCTIONS. "
-                f"Available functions: {list(self.custom_functions.keys())}"
-            )
-        
-        custom_func = self.custom_functions[self.config.custom_function]
-        self.logger.info(f"Using custom pattern with function: {self.config.custom_function}")
-        
-        result_df = custom_func(
-            source_df=source_df,
-            config=self.config,
-            params=self.config.pattern_params,
-            **kwargs
-        )
-        
-        return result_df
+
     
     def _apply_field_mapping_to_record(
         self,
@@ -970,13 +1489,16 @@ class EntityMapper:
             elif source_type == 'checkbox':
                 # Checkbox aggregation (create_records=false)
                 # Check each checkbox and apply mapping
-                # Multiple checked boxes can be concatenated (append=true, default) or overwrite (append=false)
+                # Supports both single values and list values in value_mappings
                 append_mode = field_config.get('append', True)  # Default to True for backward compatibility
                 
                 if value_mappings:
                     for checkbox_field_name, mapped_value in value_mappings.items():
-                        if source_row.get(checkbox_field_name) == 1:
-                            # Apply mapping with user-specified append mode
+                        checkbox_value = source_row.get(checkbox_field_name)
+                        if checkbox_value == 1:
+                            # mapped_value can be a single value or a list
+                            # target_field can be a single field or a list of fields
+                            # _map_field_value handles all combinations
                             _map_field_value(record, target_field, 1, {1: mapped_value}, append_mode=append_mode)
                 return
             
@@ -989,7 +1511,7 @@ class EntityMapper:
             
             elif target_type == 'age':
                 params = field_config.get('params', {})
-                apply_age_to_record(record, target_field, source_row, params, self.custom_functions)
+                apply_age_to_record(record, target_field, source_row, params)
             
             elif target_type == 'note':
                 note_fields = field_config.get('source_field', [])
@@ -1054,8 +1576,11 @@ class EntityMapper:
                     removed_records = df[df[field].isna()]
                     if len(removed_records) > 0:
                         id_field = 'submitter_participant_id' if 'submitter_participant_id' in df.columns else df.columns[0]
-                        removed_ids = removed_records[id_field].tolist()
-                        self.logger.warning(f"Removed {len(removed_records)} records with null '{field}': {removed_ids}")
+                        removed_ids = sorted([str(x) for x in removed_records[id_field].unique()])
+                        self.logger.warning(
+                            f"Removed {len(removed_records)} records with null '{field}' "
+                            f"(affected participant IDs: {removed_ids})"
+                        )
                     
                     df = df[df[field].notna()].copy()
             
@@ -1121,7 +1646,7 @@ class EntityMapper:
                             self.logger.debug(f"Cleaned numeric field in output: {field}")
                     
                     if fields_to_clean:
-                        self.logger.info(f"Post-processing: Cleaned {len(fields_to_clean)} numeric fields")
+                        self.logger.warning(f"Post-processing: Cleaned {len(fields_to_clean)} numeric fields")
                 
                 elif step_type == 'convert_nullable_int':
                     columns = step.get('columns', 'auto')
@@ -1405,14 +1930,12 @@ class StudyDataMapper:
     It handles:
     - Study directory auto-detection
     - Entity auto-discovery from YAML configs
-    - Dynamic loading of study-specific or default mappers
+    - Loading EntityMapper with YAML configuration
     - Batch processing of all entities
     - Results collection and reporting
     
-    The mapper automatically:
-    - Uses default EntityMapper if no custom code
-    - Detects and uses CUSTOM_FUNCTIONS if available
-    - Uses study-specific create_mapper() if defined
+    All mapping logic is driven by YAML configuration files.
+    No custom code or study-specific classes are needed.
     """
     
     def __init__(self, study_id: str, config_dir: Optional[Path] = None, 
@@ -1450,10 +1973,6 @@ class StudyDataMapper:
                 f"Expected YAML files in: {study_root}/{study_id}/config/"
             )
         
-        # Load mapper factory (study-specific or default)
-        self.custom_functions = {}
-        self.custom_create_mapper = self._load_custom_mapper()
-        
         self.mappers = {}
         self.results = {}
         self.stats = {
@@ -1477,49 +1996,10 @@ class StudyDataMapper:
         # Create entity mappers
         self._initialize_mappers()
     
-    def _load_custom_mapper(self) -> Optional[Callable]:
-        """
-        Load custom mapper function if available.
-        
-        Checks for study-specific create_mapper function and CUSTOM_FUNCTIONS.
-        Sets self.custom_functions and returns custom create_mapper if found.
-        
-        Returns:
-            Custom create_mapper function if available, otherwise None
-        """
-        module_path = f'studies.{self.study_id}.mappers'
-        
-        try:
-            # Try to import study-specific mapper module
-            self.logger.info(f"Attempting to load: {module_path}")
-            mapper_module = importlib.import_module(module_path)
-            
-            # Check for study-specific create_mapper function
-            if hasattr(mapper_module, 'create_mapper'):
-                self.logger.info(f"✓ Using study-specific create_mapper from {module_path}")
-                return mapper_module.create_mapper
-            
-            # Check for custom functions (without create_mapper)
-            if hasattr(mapper_module, 'CUSTOM_FUNCTIONS'):
-                self.custom_functions = mapper_module.CUSTOM_FUNCTIONS
-                self.logger.info(
-                    f"✓ Using default mapper with {len(self.custom_functions)} "
-                    f"custom functions from {module_path}"
-                )
-            else:
-                self.logger.info(f"Module {module_path} found but no create_mapper or CUSTOM_FUNCTIONS")
-                self.logger.info("✓ Using default mapper (no custom functions)")
-                
-        except ImportError:
-            # Module doesn't exist - use pure default
-            self.logger.info(f"No custom module found for {self.study_id}")
-            self.logger.info("✓ Using default mapper (no custom functions)")
-        
-        return None
-    
+
     def create_mapper(self, entity_name: str, study_id: str) -> EntityMapper:
         """
-        Create entity mapper (uses custom or default implementation).
+        Create entity mapper from YAML configuration.
         
         Args:
             entity_name: Name of entity to create mapper for
@@ -1528,11 +2008,6 @@ class StudyDataMapper:
         Returns:
             Configured EntityMapper instance
         """
-        # Use custom create_mapper if available
-        if self.custom_create_mapper:
-            return self.custom_create_mapper(entity_name, study_id)
-        
-        # Otherwise use default implementation
         config_file = self.config_dir / f'{entity_name}.yaml'
         
         if not config_file.exists():
@@ -1543,7 +2018,7 @@ class StudyDataMapper:
             )
         
         config = MappingConfig.from_yaml(config_file)
-        return EntityMapper(config, study_id, custom_functions=self.custom_functions)
+        return EntityMapper(config, study_id)
     
     def _discover_entities(self) -> List[str]:
         """
@@ -1571,20 +2046,156 @@ class StudyDataMapper:
     
     def load_source_data(self, input_path: Path) -> pd.DataFrame:
         """
-        Load source data from CSV file.
+        Load source data from file (supports CSV, TSV, TXT).
         
         Args:
-            input_path: Path to input CSV file
+            input_path: Path to input data file (.csv, .tsv, or .txt)
             
         Returns:
             Source DataFrame
         """
         self.logger.info(f"Loading source data from {input_path}")
         
-        df = pd.read_csv(input_path)
+        df = read_data_file(input_path)
         self.logger.info(f"Loaded {len(df)} records with {len(df.columns)} columns")
         self.stats['total_input_records'] = len(df)
         return df
+    
+    def set_input_directory(self, input_dir: Path):
+        """
+        Set the input directory for multi-file mode.
+        
+        Args:
+            input_dir: Directory containing source CSV files
+        """
+        self.input_dir = Path(input_dir)
+        if not self.input_dir.exists():
+            raise FileNotFoundError(f"Input directory not found: {self.input_dir}")
+        self.logger.info(f"Input directory set to: {self.input_dir}")
+    
+    def load_entity_source_data(self, entity_name: str) -> pd.DataFrame:
+        """
+        Load source data for a specific entity based on its configuration.
+        
+        Supports:
+        - Single primary file
+        - Multiple files with joins (left, right, inner, outer)
+        - Column filtering to load only needed columns
+        
+        Args:
+            entity_name: Name of entity to load data for
+            
+        Returns:
+            Source DataFrame for this entity
+        """
+        mapper = self.mappers[entity_name]
+        config = mapper.config
+        
+        # If no source_files config, look for auto-discovery
+        if not config.source_files:
+            # Try to auto-discover entity-specific file
+            # Try auto-discovery with common file extensions
+            for ext in ['.csv', '.tsv', '.txt']:
+                auto_file = self.input_dir / f"{entity_name.lower()}{ext}"
+                if auto_file.exists():
+                    self.logger.info(f"Auto-discovered source file: {auto_file}")
+                    df = read_data_file(auto_file)
+                    self.logger.info(f"Loaded {len(df)} records from {auto_file.name}")
+                    return df
+            
+            # If no file found, raise error
+            raise FileNotFoundError(
+                f"No source_files configured for entity '{entity_name}' and "
+                f"auto-discovery failed. Expected: {entity_name.lower()}.csv/.tsv/.txt\n"
+                f"Please specify source_file or source_files in the entity YAML config."
+            )
+        
+        # Load primary file
+        primary_file = config.source_files['primary']
+        primary_path = self.input_dir / primary_file
+        
+        if not primary_path.exists():
+            raise FileNotFoundError(
+                f"Primary source file not found for entity '{entity_name}': {primary_path}"
+            )
+        
+        self.logger.info(f"Loading primary file for {entity_name}: {primary_file}")
+        primary_df = read_data_file(primary_path)
+        self.logger.info(f"  Loaded {len(primary_df)} records with {len(primary_df.columns)} columns")
+        
+        # Load and join secondary files if specified
+        secondary_files = config.source_files.get('secondary', [])
+        
+        if not secondary_files:
+            return primary_df
+        
+        result_df = primary_df
+        
+        for sec_config in secondary_files:
+            sec_file = sec_config['file']
+            join_on = sec_config['join_on']
+            
+            # Handle file union: if sec_file is a list, concatenate all files
+            if isinstance(sec_file, list):
+                self.logger.info(f"Loading and concatenating {len(sec_file)} secondary files")
+                
+                sec_dfs = []
+                for file_name in sec_file:
+                    file_path = self.input_dir / file_name
+                    
+                    if not file_path.exists():
+                        raise FileNotFoundError(
+                            f"Secondary source file not found for entity '{entity_name}': {file_path}"
+                        )
+                    
+                    self.logger.info(f"  Loading: {file_name}")
+                    df = read_data_file(file_path)
+                    self.logger.info(f"    {len(df)} records, {len(df.columns)} columns")
+                    sec_dfs.append(df)
+                
+                # Concatenate with union of columns (fill missing with NaN)
+                sec_df = pd.concat(sec_dfs, ignore_index=True, sort=False)
+                all_columns = sec_df.columns.tolist()
+                self.logger.info(f"  Concatenated result: {len(sec_df)} records, {len(all_columns)} columns (union)")
+                
+            else:
+                # Single file (existing behavior)
+                sec_path = self.input_dir / sec_file
+                
+                if not sec_path.exists():
+                    raise FileNotFoundError(
+                        f"Secondary source file not found for entity '{entity_name}': {sec_path}"
+                    )
+                
+                self.logger.info(f"Loading secondary file: {sec_file}")
+                sec_df = read_data_file(sec_path)
+                self.logger.info(f"  Loaded {len(sec_df)} records with {len(sec_df.columns)} columns")
+            
+            # Filter columns if specified
+            columns = sec_config.get('columns')
+            
+            if columns:
+                # Ensure join key(s) are included
+                join_keys = [join_on] if isinstance(join_on, str) else join_on
+                cols_to_load = list(set(columns + join_keys))
+                sec_df = sec_df[cols_to_load]
+                self.logger.info(f"  Filtered to {len(cols_to_load)} columns")
+            
+            # Perform join
+            join_type = sec_config['join_type']
+            
+            self.logger.info(f"  Joining on '{join_on}' using '{join_type}' join")
+            
+            result_df = result_df.merge(
+                sec_df,
+                on=join_on,
+                how=join_type,
+                suffixes=('', '_secondary')
+            )
+            
+            self.logger.info(f"  Result after join: {len(result_df)} records")
+        
+        return result_df
     
     def process_entity(self, entity_name: str, source_df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -1614,7 +2225,7 @@ class StudyDataMapper:
     
     def process_all_entities(self, source_df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         """
-        Process all entities in sequence.
+        Process all entities in sequence (single-file mode).
         
         Args:
             source_df: Source DataFrame
@@ -1625,7 +2236,7 @@ class StudyDataMapper:
         self.stats['start_time'] = datetime.now()
         
         self.logger.info("=" * 80)
-        self.logger.info(f"{self.study_id.upper()} - PROCESSING ALL ENTITIES")
+        self.logger.info(f"{self.study_id.upper()} - PROCESSING ALL ENTITIES (Single-File Mode)")
         self.logger.info("=" * 80)
         
         results = {}
@@ -1633,6 +2244,43 @@ class StudyDataMapper:
         for entity_name in self.entities:
             try:
                 results[entity_name] = self.process_entity(entity_name, source_df)
+            except Exception as e:
+                self.logger.error(f"Error processing {entity_name}: {e}", exc_info=True)
+                results[entity_name] = pd.DataFrame()
+        
+        self.stats['end_time'] = datetime.now()
+        self.results = results
+        
+        return results
+    
+    def process_all_entities_multifile(self) -> Dict[str, pd.DataFrame]:
+        """
+        Process all entities in sequence (multi-file mode).
+        
+        Each entity loads its own source data based on configuration.
+        
+        Returns:
+            Dictionary mapping entity names to result DataFrames
+        """
+        self.stats['start_time'] = datetime.now()
+        
+        self.logger.info("=" * 80)
+        self.logger.info(f"{self.study_id.upper()} - PROCESSING ALL ENTITIES (Multi-File Mode)")
+        self.logger.info("=" * 80)
+        
+        results = {}
+        
+        for entity_name in self.entities:
+            try:
+                # Load entity-specific source data
+                entity_source_df = self.load_entity_source_data(entity_name)
+                
+                # Update total input records (sum across all entities)
+                self.stats['total_input_records'] += len(entity_source_df)
+                
+                # Process entity
+                results[entity_name] = self.process_entity(entity_name, entity_source_df)
+                
             except Exception as e:
                 self.logger.error(f"Error processing {entity_name}: {e}", exc_info=True)
                 results[entity_name] = pd.DataFrame()
@@ -1685,13 +2333,7 @@ class StudyDataMapper:
         report.append("")
         report.append("MAPPER DESIGN:")
         report.append(f"  Study-Agnostic: Yes")
-        
-        # Check if using custom or default mapper
-        if self.custom_create_mapper:
-            report.append(f"  Implementation: Study-specific")
-        else:
-            report.append(f"  Implementation: Default (generic)")
-        
+        report.append(f"  Implementation: YAML-driven configuration")
         report.append(f"  Entities: {len(self.entities)}")
         report.append(f"  Config Files: {len(self.entities)} YAML files")
         

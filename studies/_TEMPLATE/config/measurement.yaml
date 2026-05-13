@@ -6,6 +6,17 @@
 entity:
   name: Measurement  
   
+  # Optional: Multi-file input support
+  # Uncomment and customize to load from specific CSV file(s)
+  # source_files:
+  #   primary: "lab_results.csv"  # Main source file with lab data
+  #   # Optional: Join additional files for age calculation, etc.
+  #   # secondary:
+  #   #   - file: "demographics.csv"
+  #   #     join_on: participant_id
+  #   #     join_type: left
+  #   #     columns: [dob_year, dob_month]
+  
   fields:
     base:
       - submitter_participant_id

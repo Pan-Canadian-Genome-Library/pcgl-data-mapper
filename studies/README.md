@@ -14,15 +14,11 @@ cd studies/YourStudyName
 
 ```
 YourStudyName/
-├── config/              # YAML entity configs (required)
-│   ├── participant.yaml
-│   ├── demographic.yaml
-│   ├── diagnosis.yaml
-│   └── ...
-└── mappers/             # Custom code (optional)
-    ├── __init__.py      # CUSTOM_FUNCTIONS dict
-    ├── base.py          # Custom preprocessing/filtering
-    └── transforms.py    # Study-specific transforms
+└── config/              # YAML entity configs (required)
+    ├── participant.yaml
+    ├── demographic.yaml
+    ├── diagnosis.yaml
+    └── ...
 ```
 
 ## Example Studies
@@ -54,9 +50,9 @@ Copy the `_TEMPLATE` directory to create a new study, then customize the YAML fi
 ### HostSeq
 Complete production example with:
 - 15 entity configs (participant, diagnosis, comorbidity, etc.)
-- Custom eligibility filtering
-- Custom birth date construction
-- Custom expansion logic
+- Advanced filter configurations with participant eligibility
+- Preprocessing with `construct_date` for birth dates
+- Expansion pattern with range syntax for household members
 
 See `HostSeq/config/*.yaml` for entity configuration examples.
 
@@ -78,7 +74,7 @@ entity:
       - study_id
     extension:                # Extension schema fields (optional)
       - custom_field
-  pattern: [direct|expansion|custom]  # Mapping pattern
+  pattern: [direct|expansion]  # Mapping pattern
 ```
 
 #### Pattern Configuration
@@ -103,27 +99,183 @@ configs:
     term: "Type 2 diabetes mellitus"
 ```
 
-**Custom pattern** (advanced transformations): User-defined transformation logic
+**Range Expansion** (for repetitive configs): Auto-generate configs with templates
 ```yaml
 entity:
   name: Household
-  pattern: custom
-  function: expand_household_relationships  # Function name from CUSTOM_FUNCTIONS
-  params:                                    # Optional params passed to function
-    relationship_field: relationship_type
+  pattern: expansion
+configs:
+  - type: range
+    start: 1
+    end: 16
+    template:
+      source_field: "household_member_{n}"
+      code: "HOUSEHOLD_MEMBER"
+      term: "Household member {n}"
+      enrichments:
+        - target_field: member_id
+          id_pattern: "{study_id}-{participant_id}-M{n:02d}"
+```
+This generates 16 configs with `{n}` replaced by 1-16, and `{n:02d}` zero-padded (01-16).
+
+#### Multi-File Source Configuration
+
+If the source data was splitted across multiple CSV files, you can specify which files each entity should use.
+
+**Two Input Modes:**
+
+1. **Single-file mode** : All data in one CSV file
+   - CLI: `--input_csv data/source/study.csv`
+   - No `source_files` config needed
+
+```yaml
+entity:
+  name: Participant
+  fields:
+    base:
+      - submitter_participant_id
 ```
 
-For custom pattern, define your function in `mappers/__init__.py`:
-```python
-CUSTOM_FUNCTIONS = {
-    'expand_household_relationships': my_expansion_function
-}
+2. **Multi-file mode** : Data split across multiple CSV files
+   - CLI: `--input_dir data/source/MyStudy/`
+   - Specify `source_files` in entity config
+
+```yaml
+entity:
+  name: Diagnosis
+  source_files:
+    primary: "clinical.csv"        # Main data source
+    secondary:
+      - file: "demographics.csv"   # Additional data to join
+        join_on: participant_id    # Join key (default: participant_id)
+        join_type: left            # Join type (default: left)
+        columns: [age, dob_year]   # Only load these columns (optional)
+      
+      - file: "lab_results.csv"
+        join_on: participant_id
+        join_type: inner
+        columns: [crp_result, wbc_count]
+      
+      # Union multiple files (concatenate rows, union columns)
+      - file: [specimens_batch1.csv, specimens_batch2.csv]
+        join_on: participant_id
+        join_type: left
+        # Files are concatenated (rows appended)
+        # Columns are unioned (missing columns filled with null)
 ```
 
-Your function receives: `source_df`, `config`, `params`, and `**kwargs`, and must return a DataFrame.
+**Join Configuration Parameters:**
 
-### 2. preprocessing (optional)
-Data cleaning applied to source data before mapping.
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `file` | Yes | - | Data filename (string) or list of filenames to concatenate |
+| `join_on` | Yes | - | Column name(s) to join on |
+| `join_type` | No | `left` | Type of join: `left`, `right`, `inner`, `outer` |
+| `columns` | No | All columns | List of specific columns to load (applied after concatenation) |
+
+**File Union (Concatenation):**
+
+When `file` is a **list of files**, the mapper will:
+1. Load all files individually
+2. **Concatenate rows** vertically (append all records)
+3. **Union columns** (keep all columns from all files)
+4. **Fill missing values** with null/NaN where columns don't exist in some files
+5. Then join the concatenated result to primary file
+
+Use this when:
+- Files have the same/similar structure but from different batches/periods
+- Files share most columns but each may have extra unique columns
+- You want to combine data from multiple sources into one logical table
+
+Example:
+```yaml
+# specimens_batch1.csv has: specimen_id, type, volume, storage_temp
+# specimens_batch2.csv has: specimen_id, type, volume, collection_site
+# Result will have: specimen_id, type, volume, storage_temp, collection_site
+# Batch1 rows will have null collection_site
+# Batch2 rows will have null storage_temp
+```
+
+**Supported File Formats:**
+- `.csv` - Comma-separated values
+- `.tsv` - Tab-separated values
+- `.txt` - Text files with auto-detected delimiter
+
+**Join Types:**
+- **`left`** (default): Keep all primary records, add matching secondary data
+- **`right`**: Keep all secondary records, add matching primary data  
+- **`inner`**: Only records that exist in both files
+- **`outer`**: All records from both files
+
+**Auto-Discovery:**
+
+If you don't specify `source_files`, the mapper will:
+1. In multi-file mode (`--input_dir`): Look for `{entity_name}.csv`
+2. In single-file mode (`--input_csv`): Use the provided CSV file
+
+```yaml
+entity:
+  name: Participant
+  # No source_files specified
+  # Multi-file mode looks for: participant.csv
+  # Single-file mode uses: --input_csv file
+```
+
+
+### 2. filters (optional)
+Participant and row level filtering rules applied **before** preprocessing.
+
+```yaml
+filters:
+  participant_id_field: "id_hostseq"  # Required for participant filtering
+  
+  # Step 1: Participant eligibility (applied first)
+  participant:
+    filter:
+      - field: consent
+        op: equals
+        value: 1
+      # AND logic by default, use 'any' for OR
+      - any:
+          - field: status
+            op: equals
+            value: "active"
+          - field: enrolled
+            op: equals
+            value: 1
+  
+  # Step 2: Row selection (baseline/repeat instruments)
+  rows:
+    - name: baseline
+      filter:
+        - field: redcap_repeat_instrument
+          op: is_null
+    - name: laboratory_results
+      filter:
+        - field: redcap_repeat_instrument
+          op: equals
+          value: laboratory_results
+  
+  # Step 3: Enrichment (merge baseline fields into repeat rows)
+  enrich:
+    merge_baseline_fields: ["dob_year", "dob_month", "age"]
+```
+
+**Supported filter operators:**
+- `equals`, `not_equals`: Exact match
+- `in`, `not_in`: Value in list
+- `is_null`, `is_not_null`: Null checks
+- `greater_than`, `less_than`, `greater_equal`, `less_equal`: Numeric comparisons
+- `regex_match_any`: Field matches any pattern in list
+
+**Filter Logic:**
+- Default: All conditions at same level are combined with AND
+- `any`: Nest conditions in `any` block for OR logic
+- `all`: Explicit AND logic (same as default)
+- Supports nested `any`/`all` for complex boolean expressions
+
+### 3. preprocessing (optional)
+Field cleaning and generation applied **after filtering and enrichment** .
 
 **Supported preprocessing types:**
 - `clean_numeric`: Remove commas and spaces from numeric fields (e.g., "2,004" → 2004)
@@ -131,11 +283,24 @@ Data cleaning applied to source data before mapping.
 - `strip_whitespace`: Remove leading/trailing whitespace
 - `uppercase`: Convert text to uppercase
 - `lowercase`: Convert text to lowercase
-
-**Note:** For complex preprocessing logic, override the `preprocess()` method in a custom mapper class (see Study-Specific Customization).
+- `calculate_field`: Create calculated fields using pandas expressions
+  - Uses `df.eval()` for safe formula evaluation with automatic NaN propagation
+- `construct_date`: Build date fields from year/month/day components
+  - Uses `safe_int_conversion` for robust parsing (handles "2,019", spaces, commas)
+  - Requires `year_field` and `month_field`, `day_field` is optional
+  - Returns YYYY-MM-DD formatted strings
 
 ```yaml
 preprocessing:
+  # Construct birth date from year/month components
+  - type: construct_date
+    target: birth_date
+    params:
+      year_field: dob_year
+      month_field: dob_month
+      day_field: dob_day       # Optional, defaults to 15
+      default_day: 15          # Used if day_field not provided
+  
   # Clean specific numeric fields
   - type: clean_numeric
     fields: [dob_year, household_size]
@@ -159,46 +324,24 @@ preprocessing:
   # Normalize case
   - type: uppercase
     fields: [country_code]
-```
-
-### 3. filters (optional)
-Row-level filtering rules for which source rows to process.
-
-**Supported filter configurations:**
-- `eligible_participants`: Apply study-specific eligibility logic (define in YAML `participant_eligibility` or override `_filter_eligible_participants()` method for complex logic)
-- `include_rows`: REDCap-specific filtering (baseline/repeat_instruments)
-- `field_filters`: Generic field-based filtering with operators
-- `participant_id_field`: Specify participant ID column name
-- `merge_baseline_fields`: Merge baseline fields into repeat records
-
-**Supported filter operators:**
-- `equals`, `not_equals`: Exact match
-- `in`, `not_in`: Value in list
-- `is_null`, `is_not_null`: Null checks
-- `greater_than`, `less_than`, `greater_equal`, `less_equal`: Numeric comparisons
-- `regex_match_any`: Field matches any pattern in list (can use single-item list for one pattern)
-
-```yaml
-filters:
-  # REDCap-specific filtering
-  eligible_participants: true
-  include_rows:
-    baseline: true
-    repeat_instruments: ["labs", "visits"]
-  merge_baseline_fields: ["dob_year", "sex"]
-  participant_id_field: "participant_id"
   
-  # Generic field filtering (all conditions combined with AND)
-  field_filters:
-    - field: consent
-      operator: equals
-      value: 1
-    - field: age_years
-      operator: greater_equal
-      value: 18
-    - field: data_quality
-      operator: is_not_null
+  # Calculate age in days from gestational weeks and maternal age
+  - type: calculate_field
+    target: age_at_2nd_trimester_days
+    formula: "(maternal_age_years * 365.25) + ((gestation_week_v2 - gestation_week_v1) * 7)"
+  
+  # Calculate BMI from weight and height
+  - type: calculate_field
+    target: bmi
+    formula: "weight_kg / (height_m ** 2)"
+  
+  # Handle nulls with conditional expressions
+  - type: calculate_field
+    target: age_with_default
+    formula: "age_days if age_days.notna() else 0"
 ```
+
+
 
 ### 4. mappings (required for `direct` and `expansion` pattern)
 Field-level mapping logic. Each mapping defines how to transform source data into target fields.
@@ -419,58 +562,5 @@ validations:
     field: submitter_participant_id
 ```
 
-## Study-Specific Customization (Optional)
-
-Most studies only need YAML configuration. Only add custom Python code for complex logic that can't be expressed in YAML.
-
-### When to Use Custom Code
-
-Add custom Python code (`mappers/` directory) for:
-- **Complex eligibility logic**. E.g, Multi-field conditional filtering with nested AND/OR logic
-- **Custom transformations**. E.g, Birth date construction, relationship expansion, specialized calculations
-- **Custom expansion functions**. E.g, Alternative wide-to-long transformation logic other then the default
-- **Multi-field conditional logic**. E.g, Field values that depend on complex combinations of source fields
-
-### Custom Functions Structure and Examples
-
-```python
-# studies/YourStudy/mappers/__init__.py
-from .transforms import construct_birth_date, expand_relationships
-
-CUSTOM_FUNCTIONS = {
-    'construct_birth_date_from_year_month': construct_birth_date,
-    'custom_expand_relationship': expand_relationships
-}
-```
-
-Reference these functions by name in YAML configs:
-
-```yaml
-# In mappings or enrichments
-- target_field: age_at_enrollment
-  target_type: age
-  params:
-    birth_date_transform: construct_birth_date_from_year_month  # Custom function
-    birth_year_field: dob_year
-    birth_month_field: dob_month
-```
-
-### Custom Mapper Classes (Advanced)
-
-Override base mapper behavior for complex preprocessing or filtering:
-
-```python
-# studies/YourStudy/mappers/base.py
-from core.mappers.base import EntityMapper
-
-class StudyEntityMapper(EntityMapper):
-    def _filter_eligible_participants(self, df):
-        """Custom eligibility logic with complex conditions."""
-        consent_mask = (df['consent'] == 0) | (df['consent'].isna())
-        age_mask = df['age_years'] < 18
-        return df[~(consent_mask | age_mask)].copy()
-```
-
-See [HostSeq/mappers/base.py](HostSeq/mappers/base.py) for production example.
 
 
