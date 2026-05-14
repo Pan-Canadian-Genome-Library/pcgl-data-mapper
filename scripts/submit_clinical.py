@@ -266,10 +266,10 @@ def check_submission_status(
     Poll submission status until it reaches the expected terminal state.
 
     Validation stage: polls until VALID (waits on OPEN).
-    Commit stage:     polls until COMMITED (waits on VALID while server commits).
+    Commit stage:     polls until COMMITTED (waits on VALID while server commits).
     Raises on INVALID in either stage.
 
-    Status enum: OPEN, VALID, INVALID, CLOSED, COMMITED
+    Status enum: OPEN, VALID, INVALID, CLOSED, COMMITTED
 
     Args:
         clinical_url: Base URL for clinical API
@@ -311,7 +311,7 @@ def check_submission_status(
                 )
 
         elif stage == 'commit':
-            if status == 'COMMITED':
+            if status == 'COMMITTED':
                 print("Data successfully committed to database")
                 return True
             if status == 'VALID':
@@ -328,7 +328,7 @@ def check_submission_status(
 
     raise ValueError(
         f"Timed out after {max_wait}s waiting for submission {submission_id} "
-        f"to reach {'VALID' if stage == 'validation' else 'COMMITED'} status."
+        f"to reach {'VALID' if stage == 'validation' else 'COMMITTED'} status."
     )
 
 
@@ -600,7 +600,7 @@ def main(args):
                     print(f"\n[RESUME] Batch {batch_idx}/{len(batch_dirs)}: Previously failed, retrying...")
                     log_lines.append(f"\nBatch {batch_idx}/{len(batch_dirs)}: [RETRY - Previously failed]")
             
-            # Inter-batch pacing: each batch waits for COMMITED before proceeding
+            # Inter-batch pacing: each batch waits for COMMITTED before proceeding
             if len(batch_dirs) > 1:
                 print(f"\nBatch {batch_idx}/{len(batch_dirs)}:")
                 log_lines.append(f"\nBatch {batch_idx}/{len(batch_dirs)}:")
