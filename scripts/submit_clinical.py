@@ -12,13 +12,12 @@ import requests
 import argparse
 import os
 import glob
+import re
 import sys
-import tempfile
-import shutil
 import time
 import json
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 
 
 def handle_api_error(response: requests.Response, url: str) -> None:
@@ -143,7 +142,9 @@ def check_existing_submission(
     category_id: str,
     clinical_url: str,
     study_id: str,
-    token: str
+    token: str,
+    _retries: int = 0,
+    max_retries: int = 5
 ) -> bool:
     """
     Check for existing active submissions and delete them.
@@ -157,6 +158,12 @@ def check_existing_submission(
     Returns:
         True if check completed successfully
     """
+    if _retries >= max_retries:
+        raise ValueError(
+            f"Failed to clear existing submissions after {max_retries} attempts. "
+            "Check the server manually before retrying."
+        )
+
     print("Checking for existing submissions...")
     url = f"{clinical_url}/submission/category/{category_id}?onlyActive=true&organization={study_id}"
     response = api_request('GET', url, token)
@@ -172,8 +179,8 @@ def check_existing_submission(
         for record in response.json()['records']:
             print(f"Deleting submission: {record['id']}")
             api_request('DELETE', f"{clinical_url}/submission/{record['id']}", token)
-        # Recursively check again
-        return check_existing_submission(category_id, clinical_url, study_id, token)
+        # Re-check to confirm all were removed
+        return check_existing_submission(category_id, clinical_url, study_id, token, _retries + 1, max_retries)
     
     print("No active submissions")
     return True
@@ -251,46 +258,78 @@ def check_submission_status(
     clinical_url: str,
     submission_id: str,
     token: str,
-    stage: str = 'validation'
+    stage: str = 'validation',
+    poll_interval: int = 5,
+    max_wait: int = 300
 ) -> bool:
     """
-    Check submission status at validation or post-commit stage.
-    
+    Poll submission status until it reaches the expected terminal state.
+
+    Validation stage: polls until VALID (waits on OPEN).
+    Commit stage:     polls until COMMITED (waits on VALID while server commits).
+    Raises on INVALID in either stage.
+
+    Status enum: OPEN, VALID, INVALID, CLOSED, COMMITED
+
     Args:
         clinical_url: Base URL for clinical API
         submission_id: Submission ID to check
         token: Authentication token
-        stage: Either 'validation' or 'commit' for appropriate messaging
-        
+        stage: Either 'validation' or 'commit'
+        poll_interval: Seconds between status polls
+        max_wait: Maximum total seconds to wait before raising
+
     Returns:
-        True if status is valid
-        
+        True when the expected terminal status is reached
+
     Raises:
-        ValueError: If status is INVALID or unexpected state
+        ValueError: If status is INVALID, an unexpected state, or max_wait exceeded
     """
     stage_msg = "Validating" if stage == 'validation' else "Verifying committed"
     print(f"{stage_msg} submission: {submission_id}")
-    
-    response = api_request('GET', f"{clinical_url}/submission/{submission_id}", token)
-    status = response.json()['status']
-    print(f"Status: {status}")
-    
-    if status == 'INVALID':
-        errors = parse_validation_errors(response.json())
-        stage_error = "Validation" if stage == 'validation' else "Commit"
-        raise ValueError(f"{stage_error} failed with errors:\n" + "\n".join(errors))
-    
-    # If checking validation stage but submission is already committed, this is an error
-    if stage == 'validation' and status == 'COMMITTED':
-        raise ValueError(
-            f"Submission {submission_id} is already COMMITTED. "
-            "This may indicate the batch was previously submitted. "
-            "Check submission state file or use --resume to skip completed batches."
-        )
-    
-    success_msg = "Validation successful" if stage == 'validation' else "Data successfully committed to database"
-    print(success_msg)
-    return True
+
+    elapsed = 0
+    while elapsed < max_wait:
+        response = api_request('GET', f"{clinical_url}/submission/{submission_id}", token)
+        status = response.json()['status']
+
+        if status == 'INVALID':
+            errors = parse_validation_errors(response.json())
+            stage_error = "Validation" if stage == 'validation' else "Commit"
+            raise ValueError(f"{stage_error} failed with errors:\n" + "\n".join(errors))
+
+        if stage == 'validation':
+            if status == 'VALID':
+                print("Validation successful")
+                return True
+            if status == 'OPEN':
+                print(f"Status: {status} — waiting... ({elapsed}s elapsed)")
+            else:
+                raise ValueError(
+                    f"Submission {submission_id} reached unexpected status '{status}' "
+                    f"during validation stage."
+                )
+
+        elif stage == 'commit':
+            if status == 'COMMITED':
+                print("Data successfully committed to database")
+                return True
+            if status == 'VALID':
+                # Server is processing the commit, submission stays VALID until done
+                print(f"Status: {status} — commit in progress... ({elapsed}s elapsed)")
+            else:
+                raise ValueError(
+                    f"Submission {submission_id} reached unexpected status '{status}' "
+                    f"during commit stage."
+                )
+
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+
+    raise ValueError(
+        f"Timed out after {max_wait}s waiting for submission {submission_id} "
+        f"to reach {'VALID' if stage == 'validation' else 'COMMITED'} status."
+    )
 
 
 def commit_clinical(
@@ -482,6 +521,7 @@ def main(args):
     log_lines.append("=" * 80)
     log_lines.append("")
     
+    had_error = False
     try:
         # Step 1: Retrieve category ID
         category_id = retrieve_category_id(args.clinical_url, args.study_id, args.token)
@@ -498,8 +538,11 @@ def main(args):
             print("\nLoading existing batches...")
             log_lines.append("\nLoading existing batches...")
             
-            batch_dirs = sorted(glob.glob(os.path.join(submission_dir, f"{args.entity}_batch_*")))
-            
+            batch_dirs = sorted(
+                glob.glob(os.path.join(submission_dir, f"{args.entity}_batch_*")),
+                key=lambda p: int(m.group(1)) if (m := re.search(r'_batch_(\d+)$', os.path.basename(p))) else 0
+            )
+
             if not batch_dirs:
                 raise ValueError(
                     f"No batch directories found in {submission_dir} for entity '{args.entity}'. "
@@ -557,10 +600,7 @@ def main(args):
                     print(f"\n[RESUME] Batch {batch_idx}/{len(batch_dirs)}: Previously failed, retrying...")
                     log_lines.append(f"\nBatch {batch_idx}/{len(batch_dirs)}: [RETRY - Previously failed]")
             
-            # Add delay between batches (skip for first batch)
-            if batch_idx > 1 and not args.dry_run:
-                print(f"\nWaiting 15 seconds before next batch...")
-                time.sleep(15)
+            # Inter-batch pacing: each batch waits for COMMITED before proceeding
             if len(batch_dirs) > 1:
                 print(f"\nBatch {batch_idx}/{len(batch_dirs)}:")
                 log_lines.append(f"\nBatch {batch_idx}/{len(batch_dirs)}:")
@@ -584,7 +624,9 @@ def main(args):
             else:
                 # Actual submission
                 try:
+                    current_submission_id = None
                     submission_id = submit_clinical(args.clinical_url, category_id, args.study_id, batch_dir, args.token)
+                    current_submission_id = submission_id
                     submission_ids.append(submission_id)
                     log_lines.append(f"Submission ID: {submission_id}")
                     
@@ -602,11 +644,11 @@ def main(args):
                     
                     # Commit to database
                     commit_clinical(args.clinical_url, category_id, submission_id, args.token)
-                    log_lines.append("Status: Committed")
+                    log_lines.append("Status: Committing")
                     
                     # Verify final status
                     check_submission_status(args.clinical_url, submission_id, args.token, 'commit')
-                    log_lines.append("Status: Verified")
+                    log_lines.append("Status: Committed")
                     
                     # Save state: completed
                     batch_states[batch_dir]['status'] = 'completed'
@@ -617,10 +659,12 @@ def main(args):
                     
                 except ValueError as e:
                     # Save state: failed
+                    # Use current_submission_id if submit_clinical succeeded before the error;
+                    # fall back to the last known ID only if the submit itself never returned.
                     error_msg = str(e)
                     batch_states[batch_dir] = {
                         'status': 'failed',
-                        'submission_id': submission_ids[-1] if submission_ids else None,
+                        'submission_id': current_submission_id, # type: ignore
                         'error': error_msg
                     }
                     save_submission_state(state_file, batch_states)
@@ -652,16 +696,18 @@ def main(args):
             print("=" * 80)
             print(f"Entity: {args.entity}")
             print(f"Batches: {len(batch_dirs)}")
-            print(f"Submission IDs: {', '.join(submission_ids)}")
+            joined_ids = ', '.join(sid for sid in submission_ids if sid is not None)
+            print(f"Submission IDs: {joined_ids}")
             log_lines.append("SUBMISSION COMPLETED SUCCESSFULLY")
             log_lines.append("=" * 80)
             log_lines.append(f"Entity: {args.entity}")
             log_lines.append(f"Batches: {len(batch_dirs)}")
-            log_lines.append(f"Submission IDs: {', '.join(submission_ids)}")
+            log_lines.append(f"Submission IDs: {joined_ids}")
         print("=" * 80)
         log_lines.append("=" * 80)
         
     except ValueError as e:
+        had_error = True
         log_lines.append("\n" + "=" * 80)
         log_lines.append("SUBMISSION FAILED")
         log_lines.append("=" * 80)
@@ -675,6 +721,7 @@ def main(args):
         print("=" * 80)
         
     except Exception as e:
+        had_error = True
         log_lines.append("\n" + "=" * 80)
         log_lines.append("UNEXPECTED ERROR")
         log_lines.append("=" * 80)
@@ -700,7 +747,7 @@ def main(args):
             print(f"\nWarning: Failed to write log file: {log_error}")
         
         # Exit with error code if there was a failure
-        if 'e' in locals():
+        if had_error:
             sys.exit(1)
 
 
