@@ -47,16 +47,6 @@ Starting template for new studies with:
 
 Copy the `_TEMPLATE` directory to create a new study, then customize the YAML files with your study's field mappings.
 
-### HostSeq
-Complete production example with:
-- 15 entity configs (participant, diagnosis, comorbidity, etc.)
-- Advanced filter configurations with participant eligibility
-- Preprocessing with `construct_date` for birth dates
-- Expansion pattern with range syntax for household members
-
-See `HostSeq/config/*.yaml` for entity configuration examples.
-
-
 
 ## YAML Configuration
 
