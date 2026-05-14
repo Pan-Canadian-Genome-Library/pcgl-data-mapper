@@ -225,11 +225,6 @@ Run with verbose logging: check `prototype_mapper.log` for details.
 - See `studies/EXAMPLE/config/*.yaml` for basic configuration patterns
 - Run with: `uv run python prototype_mapper.py --study_id EXAMPLE --input_csv data/source/EXAMPLE.csv --output_dir data/mapped/EXAMPLE/`
 
-**HostSeq study** - Complete production example with 15 entities (13 base + 2 extension)
-- Direct mapping entities: participant, demographic, specimen, sample, diagnosis, sociodemographic, demographic, hla
-- Expansion mapping entities: comorbidity, medication, treatment, phenotype, procedure, measurement
-- See `studies/HostSeq/config/*.yaml` for advanced working configs
-
 **_TEMPLATE** - Starting point for new studies with pre-configured YAML files and inline documentation.
 
 ## Documentation
