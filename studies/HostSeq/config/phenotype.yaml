@@ -107,11 +107,6 @@ configs:
   # Primary Symptoms (from clinical presentation)
   # =====================================================================
 
-  - source_field: first_symptom_none___0
-    code: "HP:0000118"
-    term: "Phenotypic abnormality"
-    source_label: "First symptom - none (asymptomatic)"
-
   - source_field: cough
     code: "HP:0012735"
     term: "Cough"
@@ -328,12 +323,8 @@ configs:
 
  
   # =====================================================================
-  # Asymptomatic and Symptom Specifications
+  # Other Symptom Specifications
   # =====================================================================
-  - source_field: asymptomatic
-    code: "HP:0000118"
-    term: "Phenotypic abnormality"
-    source_label: "Asymptomatic"
   
   - source_field: symp_other
     code: "HP:0000118"
@@ -394,10 +385,15 @@ configs:
     source_label: "Bronchiolitis"
   
   - source_field: menin_enceph
+    code: "HP:0001287"
+    term: "Meningitis"
+    source_label: "Meningitis / Encephalitis"
+
+  - source_field: menin_enceph
     code: "HP:0002383"
     term: "Infectious encephalitis"
     source_label: "Meningitis / Encephalitis"
-  
+
   - source_field: comp_seizure
     code: "HP:0001250"
     term: "Seizure"

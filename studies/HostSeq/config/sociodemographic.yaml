@@ -244,7 +244,7 @@ mappings:
       2: "High school (secondary school) diploma or equivalency certificate"
       3: "College, CEGEP, or other non-university certificate or diploma"
       4: "Bachelor's degree"
-      5: "Master’s degree"
+      5: "Master's degree"
       -1: "Missing - Unknown"
     default_value: "Missing - Not provided"
   
