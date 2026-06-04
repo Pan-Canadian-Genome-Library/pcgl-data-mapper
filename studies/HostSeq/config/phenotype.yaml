@@ -273,7 +273,7 @@ configs:
   - source_field: sensitive_skin
     code: "HP:0000951"
     term: "Abnormality of the skin"
-    source_label: "Sensitive skin"
+    source_label: "Skin sensitivity"
 
   - source_field: hair_loss
     code: "HP:0001596"
@@ -327,8 +327,8 @@ configs:
   # =====================================================================
   
   - source_field: symp_other
-    code: "HP:0000118"
-    term: "Phenotypic abnormality"
+    code: "HP:0025142"
+    term: "Constitutional symptom"
     source_label: "Other symptoms"
     enrichments:
       - target_field: phenotype_observed
@@ -430,9 +430,9 @@ configs:
         source_type: checkbox
         create_records: true
         value_mappings:
-          cardiac_inflam_type___1: ["HP:0100584", "Endocarditis", "Specify cardiac inflammation type (choice=Endocarditis)"]
-          cardiac_inflam_type___2: ["HP:0012819", "Myocarditis", "Specify cardiac inflammation type (choice=Myocarditis)"]
-          cardiac_inflam_type___3: ["HP:0001701", "Pericarditis", "Specify cardiac inflammation type (choice=Pericarditis)"]
+          cardiac_inflam_type___1: ["HP:0100584", "Endocarditis", "Specify type(s) of cardiac inflammation (choice=Endocarditis)"]
+          cardiac_inflam_type___2: ["HP:0012819", "Myocarditis", "Specify type(s) of cardiac inflammation (choice=Myocarditis)"]
+          cardiac_inflam_type___3: ["HP:0001701", "Pericarditis", "Specify type(s) of cardiac inflammation (choice=Pericarditis)"]
           
   - source_field: cardiac_arrhyth
     code: "HP:0011675"
@@ -446,9 +446,9 @@ configs:
         source_type: checkbox
         create_records: true
         value_mappings:
-          cardiac_arrhyth_type___1: ["HP:0005110", "Atrial fibrillation", "Specify cardiac arrhythmia type (choice=AF)"]
-          cardiac_arrhyth_type___2: ["HP:0004756", "Ventricular tachycardia", "Specify cardiac arrhythmia type (choice=VT/VF)"]
-          cardiac_arrhyth_type___3: ["HP:0011675", "Arrhythmia", "Specify cardiac arrhythmia type (choice=Other)"]
+          cardiac_arrhyth_type___1: ["HP:0005110", "Atrial fibrillation", "Specify type(s) of cardiac arrhythmia (choice=AF)"]
+          cardiac_arrhyth_type___2: ["HP:0004308", "Ventricular arrhythmia", "Specify type(s) of cardiac arrhythmia (choice=VT/VF)"]
+          cardiac_arrhyth_type___3: ["HP:0011675", "Arrhythmia", "Specify type(s) of cardiac arrhythmia (choice=Other)"]
   
   - source_field: cardiac_ischaemia
     code: "HP:0001658"
