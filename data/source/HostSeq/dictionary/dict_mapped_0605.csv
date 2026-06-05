@@ -1,0 +1,513 @@
+source_variable,source_label,target_field,target_code,target_term,mapped_in_entities,ontology_verification_status
+id_hostseq,HostSeq study ID,submitter_diagnosis_id | submitter_participant_id | submitter_sociodem_id | submitter_treatment_id,,,"comorbidity, demographic, diagnosis, exposure, household, measurement, medication, participant, phenotype, procedure, sociodemographic, specimen, treatment",
+redcap_repeat_instrument,Repeat Instrument,,,,,
+redcap_repeat_instance,Repeat Instance,,,,,
+consent,Was informed consent obtained?,,,,,
+covid19_test,Laboratory confirmed COVID-19 test result,"disease_code, disease_term, disease_source_text",,,diagnosis,
+covid19_suspected___0,"If negative or not tested, is the participant suspected to be COVID-19 positive? (choice=No - Please do not proceed. Participant is excluded from HostSeq)",,,,,
+covid19_suspected___1,"If negative or not tested, is the participant suspected to be COVID-19 positive? (choice=Yes, participant has clinical signs of COVID-19)",diagnosis_note,,,diagnosis,
+covid19_suspected___2,"If negative or not tested, is the participant suspected to be COVID-19 positive? (choice=Yes, participant was exposed to a confirmed household member)",diagnosis_note,,,diagnosis,
+covid19_suspected___3,"If negative or not tested, is the participant suspected to be COVID-19 positive? (choice=Yes, participant was exposed at work)",diagnosis_note,,,diagnosis,
+covid19_suspected___4,"If negative or not tested, is the participant suspected to be COVID-19 positive? (choice=Yes, participant was exposed during travels in an affected area)",diagnosis_note,,,diagnosis,
+covid19_suspected___5,"If negative or not tested, is the participant suspected to be COVID-19 positive? (choice=Yes, participant demonstrated no COVID-19 related symptoms but was highly exposed)",diagnosis_note,,,diagnosis,
+covid19_suspected___6,"If negative or not tested, is the participant suspected to be COVID-19 positive? (choice=Unknown)",diagnosis_note,,,diagnosis,
+study_eligibility_complete,Complete?,,,,,
+host_hospital,Host hospital,host_hospital,,,demographic,
+pi,Site PI,,,,,
+id_source_study,Source study ID,,,,,
+enrollment_date,Source study enrollment date,age_at_enrollment | age_at_sociodem_collection | sociodem_date_collection,,,"demographic, sociodemographic",
+other_covid_study,,,,,,
+other_covid_study_pi,,,,,,
+other_covid_study_pi_2,,,,,,
+other_covid_study_pi_3,,,,,,
+other_covid_study_site,,,,,,
+other_covid_study_site_2,,,,,,
+other_covid_study_site_3,,,,,,
+age,age,age_at_diagnosis | age_at_enrollment | age_at_sociodem_collection,,,"demographic, diagnosis, sociodemographic",
+sex,Sex at birth,sex_another_category | sex_at_birth,,,sociodemographic,
+gender,Gender,gender,,,sociodemographic,
+gender_desc,Please describe your gender,gender_another_gender,,,sociodemographic,
+dob_month,Month of birth,dob_month,,,sociodemographic,
+dob_year,Year of birth,dob_year,,,sociodemographic,
+birth_country,Country of birth,birth_country,,,sociodemographic,
+birth_place,Place of birth,birth_place,,,sociodemographic,
+ancestry,Ancestry,ancestry,,,sociodemographic,
+education,Highest education level achieved,education,,,sociodemographic,
+height,Height (cm),height_cm,,,sociodemographic,
+height_unk____1,(choice=Dont know),,,,,
+weight,Weight (Kg),weight_kg,,,sociodemographic,
+weight_unk____1,(choice=Dont know),,,,,
+employment,Employment,employment_status,,,sociodemographic,
+employment_other,Specify other employment,employment_other,,,sociodemographic,
+residence_type,Type of residence,residence_type,,,sociodemographic,
+residence_type_other,Specify other residence,residence_type_other,,,sociodemographic,
+household,Number of other people in patient's household,household_size,,,sociodemographic,
+household_age_1,Person #1 age,,,,,
+household_relation_1,Person #1 relationship to patient,,,,,
+household_covid_1,Person #1 COVID-19 status,,,,,
+household_age_2,Person #2 age,,,,,
+household_relation_2,Person #2 relationship to patient,,,,,
+household_covid_2,Person #2 COVID-19 status,,,,,
+household_age_3,Person #3 age,,,,,
+household_relation_3,Person #3 relationship to patient,,,,,
+household_covid_3,Person #3 COVID-19 status,,,,,
+household_age_4,Person #4 age,,,,,
+household_relation_4,Person #4 relationship to patient,,,,,
+household_covid_4,Person #4 COVID-19 status,,,,,
+household_age_5,Person #5 age,,,,,
+household_relation_5,Person #5 relationship to patient,,,,,
+household_covid_5,Person #5 COVID-19 status,,,,,
+household_age_6,Person #6 age,,,,,
+household_relation_6,Person #6 relationship to patient,,,,,
+household_covid_6,Person #6 COVID-19 status,,,,,
+household_age_7,Person #7 age,,,,,
+household_relation_7,Person #7 relationship to patient,,,,,
+household_covid_7,Person #7 COVID-19 status,,,,,
+household_age_8,Person #8 age,,,,,
+household_relation_8,Person #8 relationship to patient,,,,,
+household_covid_8,Person #8 COVID-19 status,,,,,
+household_age_9,Person #9 age,,,,,
+household_relation_9,Person #9 relationship to patient,,,,,
+household_covid_9,Person #9 COVID-19 status,,,,,
+household_age_10,Person #10 age,,,,,
+household_relation_10,Person #10 relationship to patient,,,,,
+household_covid_10,Person #10 COVID-19 status,,,,,
+household_age_11,Person #11 age,,,,,
+household_relation_11,Person #11 relationship to patient,,,,,
+household_covid_11,Person #11 COVID-19 status,,,,,
+household_age_12,Person #12 age,,,,,
+household_relation_12,Person #12 relationship to patient,,,,,
+household_covid_12,Person #12 COVID-19 status,,,,,
+household_age_13,Person #13 age,,,,,
+household_relation_13,Person #13 relationship to patient,,,,,
+household_covid_13,Person #13 COVID-19 status,,,,,
+household_age_14,Person #14 age,,,,,
+household_relation_14,Person #14 relationship to patient,,,,,
+household_covid_14,Person #14 COVID-19 status,,,,,
+household_age_15,Person #15 age,,,,,
+household_relation_15,Person #15 relationship to patient,,,,,
+household_covid_15,Person #15 COVID-19 status,,,,,
+pregnancy,Currently pregnant,currently_pregnant,,,sociodemographic,
+pregnancy_weeks,Gestational weeks,pregnancy_weeks,,,sociodemographic,
+demographics_complete,Complete?,,,,,
+com_hiv,HIV,"comorbidity_code, comorbidity_term",MONDO:0005109,HIV infection,comorbidity,confirmed | Match
+com_immunocomp,Immunocompromised status,"comorbidity_code, comorbidity_term",icd10:D84.9,"Immunodeficiency, unspecified",comorbidity,"confirmed, deleted previous MONDO:0021094 (Immunodeficiency disorder) and replaced with icd10:D84.9 which is broader and aligns with a more general Immunocomprised status that can include immunocompromised not related to an immunodeficiency disorder. | Match"
+com_immunocomp_time,Days from the onset of covid-19 symptoms to immuno-compromisation,age_at_comorbidity_diagnosis,,,comorbidity,
+com_transplant,Organ transplant,"comorbidity_code, comorbidity_term",icd10:Z94.9,"Transplanted organ and tissue status, unspecified",comorbidity,"confirmed, Replaced MONDO:0700220 (disease related to transplantation) with icd10 code | Match"
+com_transplant_type___1,Organ type of transplant (choice=Heart),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z94.1,Heart transplant status,comorbidity,this codes looks okay. Is there a reason the icd10 code (Z94.1 was not used)? | Match
+com_transplant_type___2,Organ type of transplant (choice=Kidney),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z94.0,Kidney transplant status,comorbidity,this codes looks okay. Is there a reason the icd10 code (Z94.0 was not used)? | Match
+com_transplant_type___3,Organ type of transplant (choice=Liver),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z94.4,Liver transplant status,comorbidity,code look okay. same Q as above about using icd10 code- Z94.4? | Match
+com_transplant_type___4,Organ type of transplant (choice=Pancreas),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z94.83,Pancreas transplant status,comorbidity,code look okay. same Q as above about using icd10 code- Z94.83? | Match
+com_transplant_type___5,Organ type of transplant (choice=Intestine),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z94.82,Intestine transplant status,comorbidity,code look okay. same Q as above about using icd10 code-Z94.82? | Match
+com_transplant_type___6,Organ type of transplant (choice=Lung),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z94.2,Lung transplant status,comorbidity,code look okay. same Q as above about using icd10 code- Z94.2? | Match
+com_transplant_type___7,Organ type of transplant (choice=Eye (Cornea)),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z94.7,Corneal transplant status,comorbidity,couldnt confirm an icd10 code | Match
+com_transplant_type___8,Organ type of transplant (choice=Blood/bone marrow),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z94.81,Bone marrow transplant status,comorbidity,code look okay. same Q as above about using icd10 code- Z94.81? | Match
+com_transplant_type___9,Organ type of transplant (choice=Blood vessel),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z95,Presence of cardiac and vascular implants and grafts,comorbidity,icd 10-Z95.828? | Match
+com_transplant_type___10,Organ type of transplant (choice=Other),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z94.9,"Transplanted organ and tissue status, unspecified",comorbidity,icd10 Z94.9? | Match
+com_transplant_type_other,Specify other organ type of transplant,comorbidity_note,,,comorbidity,
+com_autoimm_rheum,"Autoimmune or rheumatologic disease (e.g., rheumatoid arthritis, systemic lupus erythematosus, multiple sclerosis, inflammaory bowel disease)","comorbidity_code, comorbidity_term",MONDO:0007179,autoimmune disease,comorbidity,confirmed | Term mismatch
+com_diabetes,Diabetes,"comorbidity_code, comorbidity_term",MONDO:0005015,diabetes mellitus,comorbidity,confirmed | Term mismatch
+com_type_i_diabetes,Type I diabetes,"comorbidity_code, comorbidity_term",MONDO:0005147,type 1 diabetes mellitus,comorbidity,confirmed | Term mismatch
+com_type_ii_diabetes,Type II diabetes,"comorbidity_code, comorbidity_term",MONDO:0005148,type 2 diabetes mellitus,comorbidity,confirmed | Term mismatch
+com_asthma,Asthma,"comorbidity_code, comorbidity_term",MONDO:0004979,asthma,comorbidity,confirmed | Term mismatch
+com_chronic_pulm,Chronic obstructive pulmonary disease (COPD),"comorbidity_code, comorbidity_term",MONDO:0005002,chronic obstructive pulmonary disease,comorbidity,confirmed | Term mismatch
+com_cystic_fibrosis,Cystic Fibrosis,"comorbidity_code, comorbidity_term",MONDO:0009061,cystic fibrosis,comorbidity,confirmed | Term mismatch
+com_sleep_apnea,Sleep Apnea,"comorbidity_code, comorbidity_term",MONDO:0005296,sleep apnea syndrome,comorbidity,confirmed | Term mismatch
+com_sleep_cpap,Home CPAP (continuous positive airway pressure) device used at night,"comorbidity_note | comorbidity_treatment_status, comorbidity_note",Under treatment,Home CPAP (continuous positive airway pressure) device used at night,comorbidity,
+com_chronic_kidney,Chronic kidney disease,"comorbidity_code, comorbidity_term",MONDO:0005300,chronic kidney disease,comorbidity,confirmed | Term mismatch
+com_liver,Liver disease,"comorbidity_code, comorbidity_term",MONDO:0005154,liver disorder,comorbidity,confirmed | Term mismatch
+com_gallbl,Gallbladder disease,"comorbidity_code, comorbidity_term",MONDO:0005281,gallbladder disorder,comorbidity,confirmed | Term mismatch
+com_pancreas,Pancreatic disease,"comorbidity_code, comorbidity_term",MONDO:0002356,pancreas disorder,comorbidity,confirmed | Term mismatch
+com_gerd,Gastroesophageal reflux disease (GERD),"comorbidity_code, comorbidity_term",MONDO:0007186,gastroesophageal reflux disease,comorbidity,confirmed | Term mismatch
+com_ibs,Irritable Bowel Syndrome (IBS),"comorbidity_code, comorbidity_term",MONDO:0005052,irritable bowel syndrome,comorbidity,confirmed | Term mismatch
+com_lipids,"Lipid disorders (hypercholesterolemia, dyslipidemia, etc.)","comorbidity_code, comorbidity_term",icd10:E78,Disorders of lipoprotein metabolism and other lipidemias,comorbidity,"confirmed, deleted previous MONDO:0002525 as this was only for inherited disorders (too narrow) and used icd10:E78 code. This code has several sub-codes, is this ok to use for PCGL purposes? | Match"
+com_bph,Benign Prostatic Hyperplasia,"comorbidity_code, comorbidity_term",MONDO:0010811,benign prostatic hyperplasia,comorbidity,added and confirmed | Match
+com_pcos,Polycystic ovary syndrome (PCOS),"comorbidity_code, comorbidity_term",MONDO:0008487,polycystic ovary syndrome,comorbidity,confirmed | Term mismatch
+com_angio,Balloon angioplasty or percutanuous coronary intervention,"comorbidity_code, comorbidity_term",icd10:R69,"Illness, unspecified",comorbidity,Maybe Z95.5 or z98.6? | Code and term mismatch
+com_bypass,Coronary artery bypass,"comorbidity_code, comorbidity_term",icd10:Z95.1,Presence of aortocoronary bypass graft,comorbidity,confirmed | Match
+com_heart_failure,Congestive heart failure,"comorbidity_code, comorbidity_term",MONDO:0005009,congestive heart failure,comorbidity,deleted previous MONDO:0005252 (Heart failure) and replaced with MONDO:0005009 | Match
+com_hypertension,Hypertension,"comorbidity_code, comorbidity_term",MONDO:0005044,hypertensive disorder,comorbidity,confirmed | Term mismatch
+com_mi,Myocardial infarction,"comorbidity_code, comorbidity_term",MONDO:0005068,myocardial infarction,comorbidity,confirmed | Term mismatch
+com_infarction_type1,Myocardial infarction Type I,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005068,Myocardial infarction,comorbidity,Need to verify
+com_infarction_type2,Myocardial infarction Type II,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005068,Myocardial infarction,comorbidity,Need to verify
+com_vascular,Peripheral vascular disease,"comorbidity_code, comorbidity_term",MONDO:0005294,peripheral vascular disease,comorbidity,confirmed | Term mismatch
+com_stroke,Stroke,"comorbidity_code, comorbidity_term",MONDO:0005098,stroke disorder,comorbidity,confirmed | Term mismatch
+com_arrythmias,Arrythmias,"comorbidity_code, comorbidity_term",icd10:I49.9,"Cardiac arrhythmia, unspecified",comorbidity,added and confirmed | Match
+com_anemia,Anemia,"comorbidity_code, comorbidity_term",MONDO:0002280,anemia,comorbidity,confirmed | Term mismatch
+com_dementia,Dementia,"comorbidity_code, comorbidity_term",MONDO:0001627,dementia,comorbidity,confirmed | Term mismatch
+com_neurological,Neurological or neuropsychiatric disease,"comorbidity_code, comorbidity_term",MONDO:0005071,nervous system disorder,comorbidity,confirmed | Term mismatch
+com_cancer,Is the patient currently diagnosed with cancer?,"comorbidity_code, comorbidity_term",MONDO:0004992,cancer,comorbidity,confirmed | Term mismatch
+com_cancer_age,Patient age at diagnosis,age_at_comorbidity_diagnosis,,,comorbidity,
+com_leukemia,Leukemia,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005059,Leukemia,comorbidity,confirmed | Match
+com_lymphoma,Lymphoma,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005062,Lymphoma,comorbidity,confirmed | Match
+com_sarcoma,Sarcoma,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005089,Sarcoma,comorbidity,confirmed | Match
+com_carcinoma,Carcinoma,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0004993,Carcinoma,comorbidity,confirmed | Match
+com_myeloma,Myeloma,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0009693,Plasma cell myeloma,comorbidity,confirmed | Match
+com_cancer_mixedtypes,Mixed types,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0004992,Cancer,comorbidity,confirmed. need to mention mixedtype in extension/ comments | Match
+com_cancer_location___0,Cancer location (choice=Skin),comorbidity_note,,,comorbidity,
+com_cancer_location___1,Cancer location (choice=Lungs),comorbidity_note,,,comorbidity,
+com_cancer_location___2,Cancer location (choice=Breast),comorbidity_note,,,comorbidity,
+com_cancer_location___3,Cancer location (choice=Head and neck),comorbidity_note,,,comorbidity,
+com_cancer_location___4,Cancer location (choice=Digestive/Gastrointestinal),comorbidity_note,,,comorbidity,
+com_cancer_location___5,Cancer location (choice=Gynecologic),comorbidity_note,,,comorbidity,
+com_cancer_location___6,"Cancer location (choice=Genitourinary (bladder, kidney, prostate, penile, testicular))",comorbidity_note,,,comorbidity,
+com_cancer_location___7,Cancer location (choice=Eye),comorbidity_note,,,comorbidity,
+com_cancer_location___8,Cancer location (choice=Musculoskeletal),comorbidity_note,,,comorbidity,
+com_cancer_location___9,Cancer location (choice=Germ cell/CNS),comorbidity_note,,,comorbidity,
+com_cancer_location___10,Cancer location (choice=Other),comorbidity_note,,,comorbidity,
+com_cancer_location____1,Cancer location (choice=Dont know),comorbidity_note,,,comorbidity,
+com_cancer_location_other,Specify other cancer location,comorbidity_note,,,comorbidity,
+com_cancer_treatment___0,Cancer treatment in the past 12 months (please mark all that apply) (choice=Surgery),comorbidity_note | comorbidity_treatment_status,,,comorbidity,
+com_cancer_treatment___1,Cancer treatment in the past 12 months (please mark all that apply) (choice=Chemotherapy),comorbidity_note | comorbidity_treatment_status,,,comorbidity,
+com_cancer_treatment___2,Cancer treatment in the past 12 months (please mark all that apply) (choice=Radiation therapy),comorbidity_note | comorbidity_treatment_status,,,comorbidity,
+com_cancer_treatment___3,Cancer treatment in the past 12 months (please mark all that apply) (choice=HSCT),comorbidity_note | comorbidity_treatment_status,,,comorbidity,
+com_cancer_treatment___4,Cancer treatment in the past 12 months (please mark all that apply) (choice=Immunotherapy),comorbidity_note | comorbidity_treatment_status,,,comorbidity,
+com_cancer_treatment___5,Cancer treatment in the past 12 months (please mark all that apply) (choice=Hormon therapy),comorbidity_note | comorbidity_treatment_status,,,comorbidity,
+com_cancer_treatment___6,Cancer treatment in the past 12 months (please mark all that apply) (choice=Clinical trials),comorbidity_note | comorbidity_treatment_status,,,comorbidity,
+com_cancer_treatment___7,Cancer treatment in the past 12 months (please mark all that apply) (choice=Other),comorbidity_note | comorbidity_treatment_status,,,comorbidity,
+com_cancer_treatment___8,Cancer treatment in the past 12 months (please mark all that apply) (choice=None),comorbidity_note | comorbidity_treatment_status,,,comorbidity,
+com_cancer_treatment____1,Cancer treatment in the past 12 months (please mark all that apply) (choice=Dont know),comorbidity_note | comorbidity_treatment_status,,,comorbidity,
+com_cancer_treatment_other,Specify other cancer treatment,comorbidity_note,,,comorbidity,
+com_other,Other comorbidities,"comorbidity_code, comorbidity_term | comorbidity_note",MONDO:0000001,disease,comorbidity,confirmed. need to mention 'other comorbidities' | Term mismatch | confirmed. need to mention 'other comorbidities' | Term mismatch
+smoke_100,Has patient smoked at least 100 (tobacco) cigarettes in their entire life? (There are 20 cigarettes in a pack.),"exposure_code, exposure_term",snomedct:365981007,Finding of tobacco smoking behavior (finding),exposure,"confirmed, but we should also include icd10-CM:Z72.0 (Tobacco use) for those participants that selected 2=Smoked 100 cigarettes in a life time,and currently smoking in the HostSeq variable options. | Code and term mismatch"
+smoke_quit_years,Years since quitting,exposure_note,,,exposure,
+smoke_habit,How many cigarettes smoked daily (at present for current smokers or prior to quitting for past smokers)?,exposure_note,,,exposure,
+tobacco_other,"Other forms and amount of current tobacco use (e.g., cigar, chew tobacco, shisha)",exposure_note,,,exposure,
+vaping,Vaping,"exposure_code, exposure_term",snomedct:722499006,Electronic cigarette user,exposure,confirmed | Code and term mismatch
+vaping_amount,Average number of cartilages per week,exposure_note,,,exposure,
+vaping_amount_other,Other measurement of vaping use,exposure_note,,,exposure,
+cannabis,Cannabis,"exposure_code, exposure_term",snomedct:398705004,Cannabis,exposure,"confirmed, deleted previous NCIT:C34445 (Cannabis dependence), as the HostSeq cannabis variable is yes/no on cannabis use. The participant is not necessarily dependent. | Code and term mismatch"
+cannabis_amount,Average number of joints/bong per week,exposure_note,,,exposure,
+cannabis_amount_other,Other measurement of cannabis use,exposure_note,,,exposure,
+comorbidities_complete,Complete?,,,,,
+er_visit,Patient seen in ER,er_visit,,,diagnosis,
+triage_date,ER triage date at reporting facility,triage_date,,,diagnosis,
+transfer_facility,Transfer from another facility,transfer_facility,,,diagnosis,
+transfer_facility_name,Name of transfer facility,transfer_facility_name,,,diagnosis,
+transfer_facility_date,ER triage date at transfer facility,transfer_facility_date,,,diagnosis,
+transfer_facility_sourceid,Source study ID # from transfer facility,transfer_facility_sourceid,,,diagnosis,
+transfer_facility_hostseqid,HostSeq study ID # from transfer facility,transfer_facility_hostseqid,,,diagnosis,
+hospitalized,Patient hospitalized,hospitalized,,,diagnosis,
+ambulatory_state,Ambulatory state,ambulatory_state,,,diagnosis,
+date_admission,Date of admission,age_at_measurement | age_at_sociodem_collection | date_admission | sociodem_date_collection,,,"diagnosis, measurement, sociodemographic",
+hospitalized_state,Hospitalized state,hospitalized_state,,,diagnosis,
+vent_days,Total duration of invasive ventilation,vent_days,,,diagnosis,
+who_covid19_severity,WHO COVID-19 severity scale,who_covid19_severity,,,diagnosis,
+hgi_a2,"COVID-19 HGI phenotype A2 Case: Hospitalized laboratory confirmed SARS-CoV-2 infection (RNA and/or serology based) AND (death or respiratory support (intubation, CPAP, BiPAP, CNP (continue external negative pressure), Optiflow/very high flow Positive End Expiratory Pressure Oxygen)) AND hospitalization with COVID-19 as a primary reason for admission (simple supplementary oxygen (e.g., 2 L/min via nasal cannulae) only does not qualify for case status) Control: Everyone that is not a case, e.g. population",hgi_a2,,,diagnosis,
+hhgi_a1,"COVID-19 HGI phenotype A1 Case: Hospitalized laboratory confirmed SARS-CoV-2 infection (RNA and/or serology based) AND (death or respiratory support (intubation, CPAP, BiPAP, CNP (continued external negative pressure), Optiflow/very high flow Positive End Expiratory Pressure Oxygen)) AND hospitalization with COVID-19 as a primary reason for admission (simple supplementary oxygen (e.g., 2 L/min via nasal cannulae) only does not qualify for case status). Control: Laboratory confirmed SARS-CoV-2 infection (RNA and/or serology based) AND not hospitalized 21 days after the test.",hhgi_a1,,,diagnosis,
+hgi_b1,"COVID-19 HGI phenotype B1 Case: Hospitalized laboratory confirmed SARS-CoV-2 infection (RNA and/or serology based), hospitalization due to corona-related symptoms. Control: Laboratory confirmed SARS-CoV-2 infection (RNA and/or serology based) AND not hospitalized 21 days after the test.",hgi_b1,,,diagnosis,
+hgi_c2,"COVID-19 HGI phenotype C2 Case: Individuals with laboratory confirmation of SARS-CoV-2 infection (RNA and/or serology based) OR EHR/ICD coding/Physician confirmed COVID-19 OR self-reported COVID-19 positive (e.g., by questionnaire). Control: Everybody that is not a case, e.g. population",hgi_c2,,,diagnosis,
+est_infection_time,"Estimated time of COVID-19 infection (estimated by (1) first date of PCR test. or (2) date of symptom onset, or (3) date of enrollment (only for studies of prospective recruitment)",est_infection_time,,,diagnosis,
+covid19_test_date,COVID-19 test date,age_at_sociodem_collection | covid19_test_date | sociodem_date_collection,,,"diagnosis, sociodemographic",
+covid19_diagnosis_date,COVID-19 diagnosis date (by lab confirmed test) - First positive test,age_at_diagnosis | age_at_sociodem_collection | diagnosis_date | sociodem_date_collection,,,"diagnosis, sociodemographic",
+pcr,PCR,pcr,,,diagnosis,
+serology___0,Serology (choice=Negative),serology_result,,,diagnosis,
+serology___1,Serology (choice=IgM Positive),serology_result,,,diagnosis,
+serology___2,Serology (choice=IgG Positive),serology_result,,,diagnosis,
+serology___3,Serology (choice=Ab Positive),serology_result,,,diagnosis,
+serology___4,Serology (choice=Ab Negative),serology_result,,,diagnosis,
+serology___5,Serology (choice=Not administered),serology_result,,,diagnosis,
+serology___6,Serology (choice=Equivocal),serology_result,,,diagnosis,
+serology_date,serology positive test date (First positive test),serology_date,,,diagnosis,
+negative_test_date,"If tests are all negative, date of last negative test",negative_test_date,,,diagnosis,
+serology_kit,Commercial serology test kit name (if known),serology_kit,,,diagnosis,
+covid19_vaccine,COVID-19 vaccination status,"exposure_amount | exposure_code, exposure_term",snomedct:28531000087107,COVID-19 vaccine,exposure,Confirmed | Term mismatch | Confirmed | Term mismatch
+covid19_vaccine_1_date,Date of first dose of COVID-19 vaccine received or scheduled,age_at_exposure,,,exposure,
+covid19_vaccine_1_name,Name of the first dose of COVID-19 vaccine,"exposure_code, exposure_term",snomedct:28531000087107,COVID-19 vaccine,exposure,Confirmed. do we need to mention the dose in the extension/ comments column | Term mismatch
+covid19_vaccine_1_desc,Please specify the name of the first dose of COVID-19 vaccine,exposure_note,,,exposure,
+covid19_vaccine_2_date,Date of second dose of COVID-19 vaccine received or scheduled,age_at_exposure,,,exposure,
+covid19_vaccine_2_name,Name of second dose of COVID-19 vaccine,"exposure_code, exposure_term",snomedct:28531000087107,COVID-19 vaccine,exposure,Confirmed. do we need to mention the dose in the extension/ comments column | Term mismatch
+covid19_vaccine_2_desc,Please specify the name of the second dose of COVID-19 vaccine,exposure_note,,,exposure,
+covid19_vaccine_3_date,Date of third dose of COVID-19 vaccine received or scheduled,age_at_exposure,,,exposure,
+covid19_vaccine_3_name,Name of third dose of COVID-19 vaccine,"exposure_code, exposure_term",snomedct:28531000087107,COVID-19 vaccine,exposure,Confirmed. do we need to mention the dose in the extension/ comments column | Term mismatch
+covid19_vaccine_3_desc,Please specify the name of the third dose of COVID-19 vaccine,exposure_note,,,exposure,
+covid19_vaccine_4_date,Date of fourth dose of COVID-19 vaccine received or scheduled,age_at_exposure,,,exposure,
+covid19_vaccine_4_name,Name of fourth dose of COVID-19 vaccine,"exposure_code, exposure_term",snomedct:28531000087107,COVID-19 vaccine,exposure,Confirmed. do we need to mention the dose in the extension/ comments column | Term mismatch
+covid19_vaccine_4_desc,Please specify the name of the fourth dose of COVID-19 vaccine,exposure_note,,,exposure,
+heart_rate,Heart rate,"measurement_code, measurement_term | measurement_result_numeric",LOINC:8867-4,Heart rate,measurement,Confirmed | Match | Confirmed | Match
+respiratory_rate,Highest respiratory rate,"measurement_code, measurement_term | measurement_result_numeric",LOINC:9279-1,Respiratory rate,measurement,Confirmed | Match | Confirmed | Match
+bp_sys,Systolyc blood pressure,"measurement_code, measurement_term | measurement_result_numeric",LOINC:8480-6,Systolic blood pressure,measurement,Confirmed | Match | Confirmed | Match
+bp_dia,Diastolic blood pressure,"measurement_code, measurement_term | measurement_result_numeric",LOINC:8462-4,Diastolic blood pressure,measurement,Confirmed | Match | Confirmed | Match
+oxygen_sat,Oxygen saturation,"measurement_code, measurement_term | measurement_result_numeric",LOINC:20564-1,Oxygen saturation in Blood,measurement,I think 20564-1 might fit this better | Term mismatch | I think 20564-1 might fit this better | Term mismatch
+oxygen_sat_on,,"measurement_code, measurement_term | measurement_result_categorical",LOINC:3151-8,Inhaled oxygen flow rate,measurement,I think icd10 Z99.81 might fit better. The categories are room air and oxygen therapy | Match | I think icd10 Z99.81 might fit better. The categories are room air and oxygen therapy | Match
+influenza,Influenza,"comorbidity_code, comorbidity_term",MONDO:0005812,influenza,comorbidity,Confirmed | Term mismatch
+influenza_type,Specify influenza type,comorbidity_note,,,comorbidity,
+influenza_type_other,Specify other influenza type,comorbidity_note,,,comorbidity,
+coronavirus,Coronavirus,"comorbidity_code, comorbidity_term",MONDO:0020753,Orthocoronavirinae infectious disease,comorbidity,Confirmed | Match
+coronavirus_type,Specify coronavirus type,comorbidity_note,,,comorbidity,
+coronavirus_type_other,Specify other coronavirus type,comorbidity_note,,,comorbidity,
+rsv,RSV,"comorbidity_code, comorbidity_term",MONDO:0001577,respiratory syncytial virus infectious disease,comorbidity,Confirmed | Term mismatch
+adenovirus,Adenovirus,"comorbidity_code, comorbidity_term",MONDO:0043479,adenoviridae infectious disease,comorbidity,Confirmed | Match
+enterovirus,Enterovirus,"comorbidity_code, comorbidity_term",MONDO:0005747,enterovirus infectious disease,comorbidity,Confirmed | Match
+bacteria,Bacteria,"comorbidity_code, comorbidity_term",MONDO:0005113,bacterial infectious disease,comorbidity,Confirmed | Match
+bacteria_type___1,Specify bacteria type (choice=Streptococcus pneumoniae),"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005114,pneumococcal infection,comorbidity,Confirmed | Match
+bacteria_type___2,Specify bacteria type (choice=Staphylococcus aureus),"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005545,staphylococcus aureus infection,comorbidity,Confirmed | Match
+bacteria_type___3,Specify bacteria type (choice=Group A streptococcus),"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0011825,"streptococcus, group A, severity of infection by",comorbidity,need to mention in extension that this variable is presence and not severity | Match
+bacteria_type___4,Specify bacteria type (choice=Escherichia coli),"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0020920,escherichia coli infection,comorbidity,This looks okay but need to confirm to mention in the extension that this is not related to recurrent e.coli infections | Match
+bacteria_type___5,Specify bacteria type (choice=Klebsiella pneumoniae),"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0030602,Klebsiella pneumonia,comorbidity,Confirmed | Match
+bacteria_type___6,Specify bacteria type (choice=Other),"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005113,bacterial infectious disease,comorbidity,"Confirmed, extension must mention ' bacterial type= Other') | Match"
+bacteria_type_other,Specify other bacteria type,comorbidity_note,,,comorbidity,
+bacteria_location___1,Specify location(s) (choice=Blood),comorbidity_note,,,comorbidity,
+bacteria_location___2,Specify location(s) (choice=Lower respiratory tract),comorbidity_note,,,comorbidity,
+bacteria_location___3,Specify location(s) (choice=Urine),comorbidity_note,,,comorbidity,
+bacteria_location___4,Specify location(s) (choice=Bone or joint),comorbidity_note,,,comorbidity,
+bacteria_location___5,Specify location(s) (choice=CNS),comorbidity_note,,,comorbidity,
+bacteria_location___6,Specify location(s) (choice=Other),comorbidity_note,,,comorbidity,
+bacteria_location_other,Specify other location(s),comorbidity_note,,,comorbidity,
+other_infect_respiratory,Other infectious respiratory diagnosis,"comorbidity_code, comorbidity_term",MONDO:0024355,respiratory tract infectious disorder,comorbidity,Confirmed | Match
+other_infect_respiratory_type,Specify other infectious respiratory diagnosis,comorbidity_note,,,comorbidity,
+pneumonia,Physician diagnosis of pneumonia,"comorbidity_code, comorbidity_term",MONDO:0005249,pneumonia,comorbidity,Confirmed | Term mismatch
+non_infective,NONE OF THE ABOVE: Suspected Non-infective,,,,,
+abo_type,ABO blood type,"measurement_code, measurement_term | measurement_result_categorical",LOINC:883-9,ABO group [Type] in Blood,measurement,Confirmed | Match | Confirmed | Match
+rh_factor,Rh factor,"measurement_code, measurement_term | measurement_result_categorical",LOINC:10331-7,Rh [Type] in Blood,measurement,Confirmed | Match | Confirmed | Match
+home_meds___1,Home medications (choice=ACE inhibitor),"medication_code, medication_term | treatment_code, treatment_term",NCIT:C247,ACE Inhibitor,"medication, treatment",Need to verify | Need to verify
+home_meds___2,Home medications (choice=Angiotensin receptor blocker),"medication_code, medication_term | treatment_code, treatment_term",NCIT:C66930,Angiotensin II Receptor Antagonist,"medication, treatment",Need to verify | Need to verify
+home_meds___3,Home medications (choice=Steroids),"medication_code, medication_term | treatment_code, treatment_term",NCIT:C843,Steroid Compound,"medication, treatment",Need to verify | Need to verify
+home_meds___4,Home medications (choice=Other immunosuppressive medication),"medication_code, medication_term | treatment_code, treatment_term",NCIT:C574,Immunosuppressant,"medication, treatment",Need to verify | Need to verify
+home_meds___5,Home medications (choice=NSAIDs),"medication_code, medication_term | treatment_code, treatment_term",NCIT:C257,Nonsteroidal Antiinflammatory Drug,"medication, treatment",Need to verify | Need to verify
+home_meds___6,Home medications (choice=Other),"treatment_code, treatment_term",,,treatment,
+home_meds___7,Home medications (choice=ACE inhibitor or Angiotensin receptor blocker),"treatment_code, treatment_term",,,treatment,
+home_meds___0,Home medications (choice=None),,,,,
+home_meds_other,Specify other home medications,treatment_note,,,treatment,
+bcg,Has the patient received BCG vaccine?,"exposure_code, exposure_term",snomedct:151071000119107,Bacillus Calmette-Guerin vaccination given,exposure,Confirmed | Match
+first_symptom_date,Onset date of first/earliest symptom,age_at_comorbidity_diagnosis | age_at_phenotype,,,"comorbidity, phenotype",
+first_symptom_none___0,(choice=Asymptomatic),,,,,
+cough,Cough,"phenotype_code, phenotype_term",HP:0012735,Cough,phenotype,confirmed | Match
+days_cough,Days with cough,phenotype_note,,,phenotype,
+days_cough_unk____1,(choice=Dont know),phenotype_note,,,phenotype,
+difficulty_breathing,Difficulty breathing,"phenotype_code, phenotype_term",HP:0002094,Dyspnea,phenotype,confirmed | Match
+diff_breathing_specify,Difficulty of breathing_severity,phenotype_severity,,,phenotype,
+highest_temp,Highest temperature recorded on admission/assessment,phenotype_note,,,phenotype,
+highest_temp_unit,,phenotype_note,,,phenotype,
+fever,Fever,"phenotype_code, phenotype_term",HP:0001945,Fever,phenotype,confirmed | Match
+days_fever,Days with Fever,phenotype_note,,,phenotype,
+days_fever_unk____1,(choice=Dont know),phenotype_note,,,phenotype,
+fatigue,Fatigue,"phenotype_code, phenotype_term",HP:0012378,Fatigue,phenotype,confirmed | Match
+myalgia,Myalgia (general aches and pains),"phenotype_code, phenotype_term",HP:0003326,Myalgia,phenotype,confirmed | Match
+runny_nose,Runny nose,"phenotype_code, phenotype_term",HP:0031417,Rhinorrhea,phenotype,confirmed | Match
+sore_throat,Sore throat,"phenotype_code, phenotype_term",HP:0033050,Pharyngalgia,phenotype,confirmed | Match
+loss_taste_smell,Loss of taste/smell sense,"phenotype_code, phenotype_term",HP:0000458 | HP:0041051,Ageusia | Anosmia,phenotype,"Confirmed, but reverse the order of codes | Code and term mismatch | Confirmed, but reverse the order of codes | Code and term mismatch"
+loss_taste_smell_specify,Specify loss of taste/smell sense,"phenotype_observed, phenotype_note",,,phenotype,
+nosebleed,Nosebleed,"phenotype_code, phenotype_term",HP:0000421,Epistaxis,phenotype,confirmed | Match
+ear_pain,Ear pain,"phenotype_code, phenotype_term",HP:0030766,Ear pain,phenotype,confirmed | Match
+wheezing,Wheezing,"phenotype_code, phenotype_term",HP:0030828,Wheezing,phenotype,confirmed | Match
+chest_pain,Chest pain,"phenotype_code, phenotype_term",HP:0100749,Chest pain,phenotype,confirmed | Match
+joint_pain,Joint pain,"phenotype_code, phenotype_term",HP:0002829,Arthralgia,phenotype,confirmed | Match
+headache,Headache,"phenotype_code, phenotype_term",HP:0002315,Headache,phenotype,confirmed | Match
+seizure,Seizures,"phenotype_code, phenotype_term",HP:0001250,Seizure,phenotype,confirmed | Match
+alter_consciousness,Altered consciousness/confusion,"phenotype_code, phenotype_term",HP:0004372,Reduced consciousness,phenotype,"confirmed, Replaced HP:0007185 (Loss of conciousness) with HP:0004372 (Reduced conciousness/confusion) | Match"
+abdominal_pain,Abdominal pain,"phenotype_code, phenotype_term",HP:0002027,Abdominal pain,phenotype,confirmed | Match
+diarrhea,Diarrhea,"phenotype_code, phenotype_term",HP:0002014,Diarrhea,phenotype,confirmed | Match
+nausea,Nausea/vomiting,"phenotype_code, phenotype_term",HP:0002017,Nausea and vomiting,phenotype,confirmed | Match
+conjunctivitis,Conjunctivitis,"phenotype_code, phenotype_term",HP:0000509,Conjunctivitis,phenotype,confirmed | Match
+rash,Skin rash,"phenotype_code, phenotype_term",HP:0000988,Skin rash,phenotype,confirmed | Match
+chills,Chills/ Shaking/ Sweat,"phenotype_code, phenotype_term",HP:0025143,Chills,phenotype,confirmed | Match
+loss_appetite,Loss of appetite/ Reduced appetite,"phenotype_code, phenotype_term",HP:0004396,Poor appetite,phenotype,"confirmed, Replaced HP:0002039 (Anorexia) with HP:004396 (Poor appetite) | Match"
+weight_loss,Weight loss,"phenotype_code, phenotype_term",HP:0001824,Weight loss,phenotype,confirmed | Match
+sensitive_skin,Skin sensitivity,"phenotype_code, phenotype_term",HP:0000951,Abnormality of the skin,phenotype,Confirmed | Match
+hair_loss,Hair loss,"phenotype_code, phenotype_term",HP:0001596,Alopecia,phenotype,confirmed | Match
+depression_anxiety,Depression/Anxiety,"phenotype_code, phenotype_term",HP:0000716 | HP:0000739,Anxiety | Depression,phenotype,Confirmed | Code and term mismatch | Confirmed | Code and term mismatch
+insomnia,Insomnia,"phenotype_code, phenotype_term",HP:0100785,Insomnia,phenotype,confirmed | Match
+sinus_pain,Sinus pain/congestion,"phenotype_code, phenotype_term",HP:0000245 | HP:0001742,Abnormal paranasal sinus morphology | Nasal congestion,phenotype,"Confirmed, but reverse the order of codes | Code and term mismatch | Confirmed, but reverse the order of codes | Code and term mismatch"
+dizziness,Dizziness/ Vertigo,"phenotype_code, phenotype_term",HP:0002321,Vertigo,phenotype,confirmed | Match
+eye_pain,Eye pain/ Blurred vision,"phenotype_code, phenotype_term",HP:0000622 | HP:0200026,Blurred vision | Ocular pain,phenotype,"Confirmed, but reverse the order of codes | Code and term mismatch | Confirmed, but reverse the order of codes | Code and term mismatch"
+asymptomatic,Asymptomatic,,,,,
+symp_other,Other symptoms,"phenotype_code, phenotype_term | phenotype_note",HP:0025142,Constitutional symptom,phenotype,I dont think this is the correct code. But I am unable to locate a correct one | Match | I dont think this is the correct code. But I am unable to locate a correct one | Match
+outcome,Outcome,"vital_status, cause_of_death, demographic_note",,,demographic,
+outcome_transfer,Transfer facility name,outcome_transfer,,,demographic,
+outcome_date,Outcome date,age_at_death,,,demographic,
+outcome_self_care,Ability to self-care at discharge versus before illness,outcome_self_care,,,demographic,
+repeat_hosp,Repeat hospital visit within 30 days?,repeat_hosp,,,diagnosis,
+repeat_hosp_date,Date of repeat hospital visit,repeat_hosp_date,,,diagnosis,
+repeat_hosp_reason,Reason for repeat hospital visit,repeat_hosp_reason,,,diagnosis,
+assessment_complete,Complete?,,,,,
+viral_pneumonitis,Viral pneumonitis,"phenotype_code, phenotype_term",HP:0002090,Pneumonia,phenotype,Confirmed | Match
+pneumonia_bact,Bacterial pneumonia,"phenotype_code, phenotype_term",HP:0002090,Pneumonia,phenotype,Confirmed | Match
+ards,Acute respiratory distress syndrome (ARDS),"phenotype_code, phenotype_term",HP:0033677,Acute respiratory distress syndrome,phenotype,Confirmed | Match
+ards_specify,Specify ARDS severity,phenotype_severity,,,phenotype,
+pneumothorax,Pneumothorax,"phenotype_code, phenotype_term",HP:0002107,Pneumothorax,phenotype,Confirmed | Match
+pleural_effusion,Pleural effusion,"phenotype_code, phenotype_term",HP:0002202,Pleural effusion,phenotype,Confirmed | Match
+cop,Cryptogenic organizing pneumonia (COP),"phenotype_code, phenotype_term",HP:0011945,Bronchiolitis obliterans organizing pneumonia,phenotype,Use this code: NCIT_C62586 | Match
+bronchiolitis,Bronchiolitis,"phenotype_code, phenotype_term",HP:0011950,Bronchiolitis,phenotype,Confirmed | Match
+menin_enceph,Meningitis / Encephalitis,"phenotype_code, phenotype_term",HP:0001287 | HP:0002383,Infectious encephalitis | Meningitis,phenotype,Confirmed | Code and term mismatch | Confirmed | Code and term mismatch
+comp_seizure,Seizure,"phenotype_code, phenotype_term",HP:0001250,Seizure,phenotype,Confirmed | Match
+comp_stroke,Stroke / Cerebrovascular accident,"phenotype_code, phenotype_term",HP:0001297,Stroke,phenotype,Confirmed | Match
+chf,Congestive heart failure,"phenotype_code, phenotype_term",HP:0001635,Congestive heart failure,phenotype,Confirmed | Match
+chf_lvef,Specify left ventricular ejection fraction status,phenotype_note,,,phenotype,
+chf_decrease,Specify % decrease,phenotype_note,,,phenotype,
+cardiac_inflam,Cardiac inflammation,"phenotype_code, phenotype_term",HP:0012819,Myocarditis,phenotype,Confirmed | Match
+cardiac_inflam_type___1,Specify type(s) of cardiac inflammation (choice=Endocarditis),"phenotype_code, phenotype_term, phenotype_source_text",HP:0100584,Endocarditis,phenotype,Confirmed | Match
+cardiac_inflam_type___2,Specify type(s) of cardiac inflammation (choice=Myocarditis),"phenotype_code, phenotype_term, phenotype_source_text",HP:0012819,Myocarditis,phenotype,Confirmed | Match
+cardiac_inflam_type___3,Specify type(s) of cardiac inflammation (choice=Pericarditis),"phenotype_code, phenotype_term, phenotype_source_text",HP:0001701,Pericarditis,phenotype,Confirmed | Match
+cardiac_arrhyth,Cardiac arrhythmia,"phenotype_code, phenotype_term",HP:0011675,Arrhythmia,phenotype,Confirmed | Match
+cardiac_arrhyth_type___1,Specify type(s) of cardiac arrhythmia (choice=AF),"phenotype_code, phenotype_term, phenotype_source_text",HP:0005110,Atrial fibrillation,phenotype,Confirmed | Match
+cardiac_arrhyth_type___2,Specify type(s) of cardiac arrhythmia (choice=VT/VF),"phenotype_code, phenotype_term, phenotype_source_text",HP:0004308,Ventricular arrhythmia,phenotype,Confirmed | Match
+cardiac_arrhyth_type___3,Specify type(s) of cardiac arrhythmia (choice=Other),"phenotype_code, phenotype_term, phenotype_source_text",HP:0011675,Arrhythmia,phenotype,Confirmed | Match
+cardiac_arrhyth_type_other,Specify other type(s) of cardiac arrhythmia,phenotype_note,,,phenotype,
+cardiac_ischaemia,Cardiac ischaemia,"phenotype_code, phenotype_term",HP:0001658,Myocardial infarction,phenotype,Confirmed | Match
+cardiac_ischaemia_type___1,Specify type of cardiac ischaemia (choice=STEMI),phenotype_note,,,phenotype,
+cardiac_ischaemia_type___2,Specify type of cardiac ischaemia (choice=NSTEMI),phenotype_note,,,phenotype,
+cardiac_ischaemia_type___3,Specify type of cardiac ischaemia (choice=Cath),phenotype_note,,,phenotype,
+cardiac_ischaemia_type___4,Specify type of cardiac ischaemia (choice=Stent),phenotype_note,,,phenotype,
+cardiac_arrest,Cardiac arrest,"phenotype_code, phenotype_term",HP:0001695,Cardiac arrest,phenotype,Confirmed | Match
+coag_disorder,Coagulation disorder / Disseminated intravascular coagulation,"phenotype_code, phenotype_term",HP:0005521,Disseminated intravascular coagulation,phenotype,Confirmed | Match
+anemia,Anemia,"phenotype_code, phenotype_term",HP:0001903,Anemia,phenotype,Confirmed | Match
+rhabdo_myo,Rhabdomyolysis / Myositis,"phenotype_code, phenotype_term",HP:0003201,Rhabdomyolysis,phenotype,Confirmed | Match
+ari_arf,Acute renal injury/ Acute renal failure,"phenotype_code, phenotype_term",HP:0001919,Acute kidney injury,phenotype,Confirmed | Match
+gastro_haemo,Gastrointestinal haemorrhage,"phenotype_code, phenotype_term",HP:0002239,Gastrointestinal hemorrhage,phenotype,Confirmed | Match
+pancreatitis,Pancreatitis,"phenotype_code, phenotype_term",HP:0001733,Pancreatitis,phenotype,Confirmed | Match
+liver_dysf,Liver dysfunction,"phenotype_code, phenotype_term",HP:0001410,Decreased liver function,phenotype,would NCIT_C50634 be a better fit? | Match
+hyperglycemia,Hyperglycemia,"phenotype_code, phenotype_term",HP:0003074,Hyperglycemia,phenotype,Confirmed | Match
+hypoglycemia,Hypoglycemia,"phenotype_code, phenotype_term",HP:0001943,Hypoglycemia,phenotype,Confirmed | Match
+inflam_syndrom,Inflammatory syndrome/Kawasaki disease like,"phenotype_code, phenotype_term",HP:0012647,Abnormal inflammatory response,phenotype,Confirmed | Match
+comp_other,Other complications,"phenotype_code, phenotype_term",HP:0025142,Constitutional symptom,phenotype,Confirmed | Match
+comp_other_desc,Please specify other complication(s),phenotype_note,,,phenotype,
+complications_complete,Complete?,,,,,
+lab_date,Date of assessment,age_at_measurement,,,measurement,
+lab_haemoglobin,Haemoglobin,"measurement_code, measurement_term",LOINC:718-7,Hemoglobin [Mass/volume] in Blood,measurement,confirmed | Match
+lab_haemoglobin_result,Haemoglobin result,measurement_result_numeric,,,measurement,
+lab_haemoglobin_unit,,"measurement_unit, measurement_unit_source_text",,,measurement,
+lab_wbc,WBC count,"measurement_code, measurement_term",LOINC:6690-2,Leukocytes [#/volume] in Blood by Automated count,measurement,confirmed | Match
+lab_wbc_result,WBC count result,measurement_result_numeric,,,measurement,
+lab_wbc_unit,,"measurement_unit, measurement_unit_source_text",,,measurement,
+lab_lymphocyte,Lymphocyte count,"measurement_code, measurement_term",LOINC:731-0,Lymphocytes [#/volume] in Blood by Automated count,measurement,confirmed | Match
+lab_lymphocyte_result,Lymphocyte count result,measurement_result_numeric,,,measurement,
+lab_neutrophil,Neutrophil count,"measurement_code, measurement_term",LOINC:751-8,Neutrophils [#/volume] in Blood by Automated count,measurement,confirmed | Match
+lab_neutrophil_result,Neutrophil count result,measurement_result_numeric,,,measurement,
+lab_haematocrit,Haematocrit,"measurement_code, measurement_term",LOINC:4544-3,Hematocrit [Volume Fraction] of Blood by Automated count,measurement,confirmed | Match
+lab_haematocrit_result,Haematocrit result,measurement_result_numeric,,,measurement,
+lab_platelets,Platelets,"measurement_code, measurement_term",LOINC:777-3,Platelets [#/volume] in Blood by Automated count,measurement,confirmed | Match
+lab_platelets_result,Platelets result,measurement_result_numeric,,,measurement,
+lab_platelets_unit,,"measurement_unit, measurement_unit_source_text",,,measurement,
+lab_aptt,APTT,"measurement_code, measurement_term",LOINC:3173-2,aPTT in Blood by Coagulation assay,measurement,confirmed | Match
+lab_aptt_result,APTT (seconds),measurement_result_numeric,,,measurement,
+lab_aptt_aptr,APTT/APTR,"measurement_code, measurement_term",LOINC:63561-5,aPTT actual/normal in Platelet poor plasma by Coagulation assay,measurement,we can go with this code in the extension/ comment column the HostSeq label should be added | Match
+lab_aptt_aptr_result,APTT/APTR result,measurement_result_numeric,,,measurement,
+lab_pt,PT,"measurement_code, measurement_term",LOINC:5902-2,Prothrombin time (PT),measurement,confirmed | Match
+lab_pt_result,PT result,measurement_result_numeric,,,measurement,
+lab_inr,INR,"measurement_code, measurement_term",LOINC:6301-6,INR in Platelet poor plasma by Coagulation assay,measurement,confirmed | Match
+lab_inr_result,INR result,measurement_result_numeric,,,measurement,
+lab_alt_sgpt,ALT/SGPT,"measurement_code, measurement_term",LOINC:1742-6,Alanine aminotransferase [Enzymatic activity/volume] in Serum or Plasma,measurement,confirmed | Match
+lab_alt_sgpt_result,ALT/SGPT result,measurement_result_numeric,,,measurement,
+lab_total_bilirubin,Total bilirubin,"measurement_code, measurement_term",LOINC:1975-2,Bilirubin.total [Mass/volume] in Serum or Plasma,measurement,"confirmed, Shantala to convert measurement for one record | Match"
+lab_total_bilirubin_result,Total bilirubin result,measurement_result_numeric,,,measurement,
+lab_total_bilirubin_unit,,"measurement_unit, measurement_unit_source_text",,,measurement,
+lab_ast_sgot,AST/SGOT,"measurement_code, measurement_term",LOINC:1920-8,Aspartate aminotransferase [Enzymatic activity/volume] in Serum or Plasma,measurement,confirmed | Match
+lab_ast_sgot_result,AST/SGOT result,measurement_result_numeric,,,measurement,
+lab_glucose,Glucose,"measurement_code, measurement_term",LOINC:2345-7,Glucose [Mass/volume] in Serum or Plasma,measurement,confirmed | Match
+lab_glucose_result,Glucose result,measurement_result_numeric,,,measurement,
+lab_glucose_unit,,"measurement_unit, measurement_unit_source_text",,,measurement,
+lab_bun,Blood urea nitrogen (urea),"measurement_code, measurement_term",LOINC:3094-0,Urea nitrogen [Mass/volume] in Serum or Plasma,measurement,confirmed | Match
+lab_bun_result,Blood urea nitrogen (urea) result,measurement_result_numeric,,,measurement,
+lab_bun_unit,,"measurement_unit, measurement_unit_source_text",,,measurement,
+lab_lactate,Lactate,"measurement_code, measurement_term",LOINC:2524-7,Lactate [Moles/volume] in Serum or Plasma,measurement,"confirmed, Shantala to convert measurement for one record | Match"
+lab_lactate_result,Lactate result,measurement_result_numeric,,,measurement,
+lab_lactate_unit,,"measurement_unit, measurement_unit_source_text",,,measurement,
+lab_creatinine,Creatinine,"measurement_code, measurement_term",LOINC:2160-0,Creatinine [Mass/volume] in Serum or Plasma,measurement,confirmed | Match
+lab_creatinine_result,Creatinine result,measurement_result_numeric,,,measurement,
+lab_creatinine_unit,,"measurement_unit, measurement_unit_source_text",,,measurement,
+lab_sodium,Sodium,"measurement_code, measurement_term",LOINC:2951-2,Sodium [Moles/volume] in Serum or Plasma,measurement,confirmed | Match
+lab_sodium_result,Sodium result,measurement_result_numeric,,,measurement,
+lab_potassium,Potassium,"measurement_code, measurement_term",LOINC:2823-3,Potassium [Moles/volume] in Serum or Plasma,measurement,confirmed | Match
+lab_potassium_result,Potassium result,measurement_result_numeric,,,measurement,
+lab_procalcitonin,Procalcitonin,"measurement_code, measurement_term",LOINC:33959-8,Procalcitonin [Mass/volume] in Serum or Plasma,measurement,confirmed | Match
+lab_procalcitonin_result,Procalcitonin result,measurement_result_numeric,,,measurement,
+lab_crp,CRP,"measurement_code, measurement_term",LOINC:1988-5,C reactive protein [Mass/volume] in Serum or Plasma,measurement,confirmed | Match
+lab_crp_result,CRP result,measurement_result_numeric,,,measurement,
+lab_chest_ct,Chest CT,"measurement_code, measurement_term | measurement_result_categorical",LOINC:24627-2,CT Chest,measurement,confirmed | Match | confirmed | Match
+lab_chest_xray,Chest X-ray,"measurement_code, measurement_term",LOINC:24657-9,XR tomography Chest,measurement,confirmed | Match
+lab_chest_xray_infiltrates,Infiltrates present on chest X-ray,measurement_result_categorical,,,measurement,
+lab_ecg,ECG,"measurement_code, measurement_term | measurement_result_categorical",LOINC:11524-6,EKG study,measurement,confirmed | Match | confirmed | Match
+lab_pocus,POCUS,"measurement_code, measurement_term | measurement_result_categorical",LOINC:25061-3,US Unspecified body region,measurement,Confirmed | Match | Confirmed | Match
+lab_echo,Echocardiogram,"measurement_code, measurement_term | measurement_result_categorical",LOINC:18106-5,Cardiac echo study Procedure,measurement,confirmed | Code and term mismatch | confirmed | Code and term mismatch
+lab_ldh,LDH,"measurement_code, measurement_term",LOINC:2532-0,Lactate dehydrogenase [Enzymatic activity/volume] in Serum or Plasma,measurement,confirmed | Match
+lab_ldh_result,LDH result,measurement_result_numeric,,,measurement,
+lab_ldh_unit,,"measurement_unit, measurement_unit_source_text",,,measurement,
+lab_ddimer,D-Dimer,"measurement_code, measurement_term",LOINC:48065-7,Fibrin D-dimer FEU [Mass/volume] in Platelet poor plasma,measurement,Confirmed | Match
+lab_ddimer_result,D-Dimer result,measurement_result_numeric,,,measurement,
+lab_fibrinogen,Fibrinogen,"measurement_code, measurement_term",LOINC:3255-7,Fibrinogen [Mass/volume] in Platelet poor plasma by Coagulation assay,measurement,confirmed | Match
+lab_fibrinogen_result,Fibrinogen result,measurement_result_numeric,,,measurement,
+lab_fibrinogen_unit,,"measurement_unit, measurement_unit_source_text",,,measurement,
+lab_ferritin,Ferritin,"measurement_code, measurement_term",LOINC:2276-4,Ferritin [Mass/volume] in Serum or Plasma,measurement,confirmed | Match
+lab_ferritin_result,Ferritin result,measurement_result_numeric,,,measurement,
+lab_triglycerides,Triglycerides,"measurement_code, measurement_term",LOINC:2571-8,Triglyceride [Mass/volume] in Serum or Plasma,measurement,confirmed | Match
+lab_triglycerides_result,Triglycerides result,measurement_result_numeric,,,measurement,
+lab_il6,IL-6,"measurement_code, measurement_term",LOINC:26881-3,Interleukin 6 [Mass/volume] in Serum or Plasma,measurement,confirmed | Match
+lab_il6_result,IL-6 result,measurement_result_numeric,,,measurement,
+lab_cd4,CD4,"measurement_code, measurement_term",LOINC:24467-3,CD3+CD4+ (T4 helper) cells [#/volume] in Blood,measurement,confirmed | Match
+lab_cd4_result,CD4 result,measurement_result_numeric,,,measurement,
+lab_cd8,CD8,"measurement_code, measurement_term",LOINC:14135-8,CD3+CD8+ (T8 suppressor) cells [#/volume] in Blood,measurement,added and confirmed | Match
+lab_cd8_result,CD8 result,measurement_result_numeric,,,measurement,
+lab_cd4_cd8,CD4/CD8 ratio,"measurement_code, measurement_term",LOINC:54218-3,CD3+CD4+ (T4 helper) cells/CD3+CD8+ (T8 suppressor cells) cells [# Ratio] in Blood,measurement,confirmed | Match
+lab_cd4_cd8_result,CD4/CD8 ratio result,measurement_result_numeric,,,measurement,
+lab_nt_probnp,NT_proBNP,"measurement_code, measurement_term",LOINC:33762-6,Natriuretic peptide.B prohormone N-Terminal [Mass/volume] in Serum or Plasma,measurement,confirmed | Match
+lab_nt_probnp_result,NT_proBNP result,measurement_result_numeric,,,measurement,
+lab_bnp,BNP,"measurement_code, measurement_term",LOINC:30934-4,Natriuretic peptide B [Mass/volume] in Serum or Plasma,measurement,confirmed | Match
+lab_bnp_result,BNP result,measurement_result_numeric,,,measurement,
+lab_bnp_unit,,"measurement_unit, measurement_unit_source_text",,,measurement,
+lab_troponin,Troponin,"measurement_code, measurement_term",LOINC:6598-7,Troponin T.cardiac [Mass/volume] in Serum or Plasma,measurement,This is for troponin cardiac. I am not sure if that is what the hostseq variable captures. what about using snomedct 105000003 instead | Match
+lab_troponin_result,Troponin result,measurement_result_numeric,,,measurement,
+lab_troponin_unit,,"measurement_unit, measurement_unit_source_text",,,measurement,
+laboratory_results_complete,Complete?,,,,,
+treat_hospital,Treating hospital,treat_hospital,,,demographic,
+icu_hd,ICU or High Dependency Unit admission,"treatment_code, treatment_term",,,treatment,
+icu_admis,"If yes, date of ICU admission",age_at_treatment | treatment_duration,,,treatment,
+icu_disch,"If yes, date of ICU discharge",treatment_duration,,,treatment,
+prone_vent,Prone ventilation,"procedure_code, procedure_term | treatment_code, treatment_term",snomedct:870391004,Assisted ventilation in prone position,"procedure, treatment",confirmed | Match | Need to verify
+inhaled_no,Inhaled nitric oxide,"procedure_code, procedure_term | treatment_code, treatment_term",snomedct:1255879001,Administration of nitric oxide,"procedure, treatment",confirmed | Match | Need to verify
+trach,Tracheostomy inserted,"procedure_code, procedure_term | treatment_code, treatment_term",snomedct:232685002,Insertion of tracheostomy tube,"procedure, treatment","confirmed, Replaced snomedct:21619009 (Permanent tracheostomy) with 232685002. | Match | Need to verify"
+extracorp,Extracorporeal support,"procedure_code, procedure_term | treatment_code, treatment_term",snomedct:232969009,Cardiac support using extracorporeal membrane oxygenation circuitry,"procedure, treatment","Cannot identify a code for this, make extended variable | Code and term mismatch | Need to verify"
+dialysis,Renal replacement therapy (RRT) or dialysis,"procedure_code, procedure_term | treatment_code, treatment_term",snomedct:265764009,Renal dialysis,"procedure, treatment",confirmed | Match | Need to verify
+inotrop_vasopress,Inotropes/vasopressors,"procedure_code, procedure_term | treatment_code, treatment_term",NCIT:C191468,Implantation of Temporary Mechanical Circulatory Support Device,"procedure, treatment","Cannot identify a code for this, make extended variable | Code and term mismatch | Need to verify"
+inotrop_vasopress_start,Inotropes/vasopressors start date,age_at_treatment | treatment_duration,,,treatment,
+inotrop_vasopress_end,Inotropes/vasopressors end date,treatment_duration,,,treatment,
+other_intervention,Other intervention or procedure,"treatment_code, treatment_term",,,treatment,
+other_intervention_desc,Please sepcify other intervention or procedure,treatment_note,,,treatment,
+antiviral,Antiviral agent,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C281,Antiviral Agent,"medication, treatment",Need to verify | Need to verify
+antiviral_ribavirin,Ribavirin,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C807,Ribavirin,"medication, treatment",confirmed | Code mismatch | Need to verify
+antiviral_lopin_riton,Lopinavir/Ritonavir,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C2096,Lopinavir/Ritonavir,"medication, treatment",confirmed | Code and term mismatch | Need to verify
+antiviral_interf_a,Interferon alpha,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C20494,Interferon Alpha,"medication, treatment","Cannot identify a code for this, make extended variable | Code and term mismatch | Need to verify"
+antiviral_interf_b,Interferon beta,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C20495,Interferon Beta,"medication, treatment",confirmed | Code and term mismatch | Need to verify
+antiviral_neur_inhibitor,Neuraminidase inhibitor,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C217656,Neuraminidase Inhibitor,"medication, treatment",added and confirmed | Match | Need to verify
+antiviral_other,Other antiviral agent,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C281,Antiviral Agent,"medication, treatment",Need to verify | Need to verify
+antiviral_other_name,Specify other antiviral agent,drug_note | treatment_note,,,"medication, treatment",
+antibiotic_azithro,Azithromycin (Zithromax),"medication_code, medication_term | treatment_code, treatment_term",rxnorm:18631,azithromycin,"medication, treatment",confirmed | Term mismatch | Need to verify
+antibiotic_other,Any other antibiotic,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C15620,Antibiotic Therapy,"medication, treatment",Need to verify | Need to verify
+antibiotic_other_name,Specify other antibiotic,drug_note | treatment_note,,,"medication, treatment",
+cort,Corticosteroid,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C2322,Corticosteroid,"medication, treatment",Need to verify | Need to verify
+cort_oral,Oral corticosteroids,treatment_note,,,treatment,
+cort_iv,IV corticosteroids,treatment_note,,,treatment,
+cort_inhal,Inhaled corticosteroids,treatment_note,,,treatment,
+cort_type___1,Specify corticosteroid type (choice=Methylprednisone),"drug_code, drug_term, drug_source_text",rxnorm:6902,methylprednisolone,medication,confirmed | Term mismatch
+cort_type___2,Specify corticosteroid type (choice=Prednisone),"drug_code, drug_term, drug_source_text",rxnorm:8640,prednisone,medication,confirmed | Term mismatch
+cort_type___3,Specify corticosteroid type (choice=Prednisolone),"drug_code, drug_term, drug_source_text",rxnorm:8638,prednisolone,medication,confirmed | Term mismatch
+cort_type___4,Specify corticosteroid type (choice=Hydrocortisone),"drug_code, drug_term, drug_source_text",rxnorm:5492,hydrocortisone,medication,confirmed | Term mismatch
+cort_type___5,Specify corticosteroid type (choice=Other),"drug_code, drug_term, drug_source_text",NCIT:C2323,Glucocorticoid,medication,Need to verify
+cort_type_other,Specify other corticosteroid type,treatment_note,,,treatment,
+cort_dose,Specify corticosteroid dose,actual_cumulative_drug_dose | prescribed_cumulative_drug_dose,,,medication,
+antifungal,Antifungal agent,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C514,Antifungal Agent,"medication, treatment",added and confirmed | Match | Need to verify
+colchicine,Colchicine,"medication_code, medication_term | treatment_code, treatment_term",rxnorm:2683,colchicine,"medication, treatment",confirmed | Term mismatch | Need to verify
+chloroq,Chloroquine (Aralen),"medication_code, medication_term | treatment_code, treatment_term",rxnorm:2393,chloroquine,"medication, treatment",confirmed | Term mismatch | Need to verify
+hydroxychloroq,Hydroxycholorquine,"medication_code, medication_term | treatment_code, treatment_term",rxnorm:5521,hydroxychloroquine,"medication, treatment",confirmed | Term mismatch | Need to verify
+tocil,Tocilizumab (Actemra),"medication_code, medication_term | treatment_code, treatment_term",NCIT:C84217,Tocilizumab,"medication, treatment",confirmed | Code mismatch | Need to verify
+kineret,Kineret (Anakinra),"medication_code, medication_term | treatment_code, treatment_term",rxnorm:352734,Kineret,"medication, treatment",confirmed | Match | Need to verify
+ivig,IVIG,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C121331,Intravenous Immunoglobulin Therapy,"medication, treatment",added and confirmed | Match | Need to verify
+plasma,Plasma,"treatment_code, treatment_term",,,treatment,
+othercovid_therapy,Other COVID-19 therapy,"treatment_code, treatment_term",,,treatment,
+othercovid_therapy_type,Specify other COVID-19 therapy,treatment_note,,,treatment,
+treatment_complete,Complete?,,,,,
+dna_number,DNA number (lab use only),submitter_sample_id | submitter_specimen_id,,,"hla, sample, specimen",
+lims_id,,,,,,
+dna_sequenced_site,Sequencing site,,,,,
+dna_received_date,Date sample was received,age_at_specimen_collection,,,specimen,
+dna_sequenced_date,Date sample was sequenced,,,,,
+hla,HLA typing,,,,,
+hla_optitype_a1,HLA Optitype A1,hla_optitype_a1,,,hla,
+hla_optitype_a2,HLA Optitype A2,hla_optitype_a2,,,hla,
+hla_optitype_b1,HLA Optitype B1,hla_optitype_b1,,,hla,
+hla_optitype_b2,HLA Optitype B2,hla_optitype_b2,,,hla,
+hla_optitype_c1,HLA Optitype C1,hla_optitype_c1,,,hla,
+hla_optitype_c2,HLA Optitype C2,hla_optitype_c2,,,hla,
+hla_optitype_reads,HLA Optitype Reads,hla_optitype_reads,,,hla,
+hla_optitype_obj,HLA Optitype Objective,hla_optitype_objective,,,hla,
+dna_sample_complete,Complete?,,,,,
