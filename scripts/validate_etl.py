@@ -123,6 +123,13 @@ class ETLValidator:
     long_suffix : str
         File suffix appended to the entity name to form the long-table
         filename (default: ".csv").
+    skipped_values : list of str, optional
+        Wide-table cell values (matched as strings) that do **not** generate
+        a long-table row and should therefore be excluded from expected-row
+        counts in Checks 1, 2, and 4.  For example, pass ``["0", "-1"]``
+        for entities where ``0`` means "not performed" and ``-1`` means
+        "unknown" — only cells with other values are counted as qualifying.
+        When ``None`` (default), all non-null cells are counted.
     """
 
     def __init__(
@@ -132,12 +139,14 @@ class ETLValidator:
         rare_threshold: int = 1,
         top_n: int = 5,
         long_suffix: str = ".csv",
+        skipped_values: Optional[List[str]] = None,
     ) -> None:
         self.wide_pid_col = wide_pid_col
         self.long_pid_col = long_pid_col
         self.rare_threshold = rare_threshold
         self.top_n = top_n
         self.long_suffix = long_suffix
+        self.skipped_values = skipped_values
 
     # ------------------------------------------------------------------
     # Loaders
@@ -299,8 +308,18 @@ class ETLValidator:
         present_cols = [c for c in source_columns if c in wide_df.columns]
         missing_from_wide = [c for c in source_columns if c not in wide_df.columns]
 
-        # Total non-null values across all domain columns in the wide table
-        expected_rows = int(wide_df[present_cols].notna().sum().sum()) if present_cols else 0
+        # Count qualifying wide-table cells: non-null, and not in skipped_values
+        if present_cols:
+            sub = wide_df[present_cols]
+            sv_set = self._build_skip_set()
+            if sv_set is not None:
+                mask = sub.notna() & ~sub.astype(str).isin(sv_set)
+            else:
+                mask = sub.notna()
+            expected_rows = int(mask.sum().sum())
+        else:
+            expected_rows = 0
+
         actual_rows = len(long_df)
         match = expected_rows == actual_rows
         delta = actual_rows - expected_rows
@@ -310,7 +329,8 @@ class ETLValidator:
             "source_columns_counted": len(source_columns),
             "source_columns_found_in_wide": len(present_cols),
             "source_columns_missing_from_wide": missing_from_wide,
-            "expected_long_rows (non-null wide values)": expected_rows,
+            "skipped_values": self.skipped_values,
+            "expected_long_rows": expected_rows,
             "actual_long_rows": actual_rows,
             "delta (actual - expected)": delta,
             "PASS": match,
@@ -325,11 +345,19 @@ class ETLValidator:
         entity: str,
         prefix: str,
         entity_config: pd.DataFrame,
+        wide_df: pd.DataFrame,
         long_df: pd.DataFrame,
     ) -> Dict:
         """
-        Ensure every source_label defined in the config has produced at
-        least one row in the long table's ``{prefix}_source_text`` column.
+        Ensure every source_label that has a configured target_code or
+        target_term has produced at least one row in the long table's
+        ``{prefix}_source_text`` column.
+
+        Labels whose source_variable has no qualifying values in the wide
+        table (all null, all zero, or absent) are separated as
+        ``expected_empty`` — they do **not** cause a FAIL.  Only labels
+        where the wide table contains qualifying data but the long table has
+        no corresponding row are counted as true gaps and cause a FAIL.
         """
         source_text_col = f"{prefix}_source_text"
 
@@ -340,19 +368,66 @@ class ETLValidator:
                 "PASS": False,
             }
 
-        expected_sources: set = set(entity_config["source_label"].unique())
+        # Only check source_labels that are expected to produce records
+        mapped_config = entity_config[
+            entity_config["target_code"].str.strip().ne("") |
+            entity_config["target_term"].str.strip().ne("")
+        ]
+        expected_sources: set = set(mapped_config["source_label"].unique())
         observed_sources: set = set(long_df[source_text_col].dropna().unique())
 
-        not_produced = sorted(expected_sources - observed_sources)
+        not_produced_raw = sorted(expected_sources - observed_sources)
         unexpected = sorted(observed_sources - expected_sources)
+
+        # Build source_label → source_variable lookup for wide-table check
+        label_to_var = (
+            mapped_config[["source_label", "source_variable"]]
+            .drop_duplicates()
+            .set_index("source_label")["source_variable"]
+            .to_dict()
+        )
+
+        # Classify not_produced labels:
+        #   true_gaps     – wide column has at least one non-null, non-zero value
+        #                   but the label never appears in the long table → genuine ETL gap
+        #   expected_empty – wide column is absent, entirely null, or entirely
+        #                   zero/falsy (e.g. binary checkbox where no participant
+        #                   answered "yes") → no records expected, not a gap
+        sv_set_c2 = self._build_skip_set()
+
+        true_gaps: List[str] = []
+        expected_empty: List[str] = []
+        for label in not_produced_raw:
+            var = label_to_var.get(label, "")
+            if var and var in wide_df.columns:
+                col = wide_df[var]
+                non_null = col.dropna()
+                if sv_set_c2 is not None:
+                    has_qualifying = bool(
+                        len(non_null) > 0
+                        and (~non_null.astype(str).isin(sv_set_c2)).any()
+                    )
+                else:
+                    has_qualifying = bool(
+                        len(non_null) > 0
+                        and ((non_null != 0) & (non_null != "") & (non_null != "0")).any()
+                    )
+                if has_qualifying:
+                    true_gaps.append(label)
+                else:
+                    expected_empty.append(label)
+            else:
+                # Variable absent from wide table → expected empty
+                expected_empty.append(label)
 
         return {
             "source_text_column": source_text_col,
             "expected_source_columns": len(expected_sources),
             "observed_source_columns": len(observed_sources),
-            "not_produced (in config but absent from long table)": not_produced,
+            "true_gaps (has wide data but absent from long table)": true_gaps,
+            "expected_empty (no qualifying values in wide table)": expected_empty,
             "unexpected (in long table but not in config)": unexpected,
-            "PASS": len(not_produced) == 0,
+            "PASS": len(true_gaps) == 0,
         }
 
     # ------------------------------------------------------------------
@@ -368,14 +443,15 @@ class ETLValidator:
         long_df: pd.DataFrame,
     ) -> Dict:
         """
-        Build a prevalence table for ``{prefix}_code`` in the long table with one
-        row per (source_variable, code) pair.  Rows are ordered by the
-        source_variable's position in the mapping config (input order), then by
-        code within the same source variable.
-        Also summarises rare codes (≤ rare_threshold unique participants).
+        Build a prevalence table anchored to the mapping config: every
+        (source_variable, target_code, target_term) tuple that has a configured
+        target_code or target_term gets its own row, with ``unique_participants``
+        set to 0 when no long-table records were produced for it.
+
+        Rows are ordered by source_variable's position in the config (input
+        order), then by target_code within the same source_variable.
         """
         code_col = f"{prefix}_code"
-        term_col = f"{prefix}_term"
         source_text_col = f"{prefix}_source_text"
         wide_pid_col = self.wide_pid_col
         long_pid_col = self.long_pid_col
@@ -398,12 +474,23 @@ class ETLValidator:
                 "PASS": False,
             }
 
+        # All (source_variable, source_label, target_code, target_term) rows from
+        # config that are expected to produce long-table records.
+        mapped_config = (
+            entity_config[
+                entity_config["target_code"].str.strip().ne("") |
+                entity_config["target_term"].str.strip().ne("")
+            ][["source_variable", "source_label", "target_code", "target_term"]]
+            .drop_duplicates()
+            .reset_index(drop=True)
+        )
+
         # Ordered unique source variables from the config (preserves file input order)
         config_var_order = {
             v: i for i, v in enumerate(entity_config["source_variable"].unique())
         }
 
-        # Map source_label → source_variable
+        # Map source_label → source_variable for annotating long-table rows
         label_to_var = (
             entity_config[["source_label", "source_variable"]]
             .drop_duplicates()
@@ -411,7 +498,7 @@ class ETLValidator:
             .to_dict()
         )
 
-        # Annotate long table rows with their originating source_variable
+        # Annotate long-table rows with their originating source_variable
         working = long_df.dropna(subset=[code_col]).copy()
         if source_text_col in working.columns:
             working["_source_var"] = working[source_text_col].map(label_to_var)
@@ -419,47 +506,54 @@ class ETLValidator:
             working["_source_var"] = ""
 
         # Unique participant count per (source_variable, code) pair
-        grouped = (
-            working.dropna(subset=["_source_var"])
-            .groupby(["_source_var", code_col])[long_pid_col]
-            .nunique()
-            .rename("unique_participants")
-            .reset_index()
-            .rename(columns={"_source_var": "source_variable"})
-        )
-
-        # Attach term label when available
-        if term_col in long_df.columns:
-            term_map = (
-                long_df.dropna(subset=[code_col, term_col])
-                .drop_duplicates(subset=[code_col])[[code_col, term_col]]
+        if not working.empty:
+            actual_counts = (
+                working.dropna(subset=["_source_var"])
+                .groupby(["_source_var", code_col])[long_pid_col]
+                .nunique()
+                .rename("unique_participants")
+                .reset_index()
+                .rename(columns={"_source_var": "source_variable", code_col: "target_code"})
             )
-            grouped = grouped.merge(term_map, on=code_col, how="left")
         else:
-            grouped[term_col] = ""
+            actual_counts = pd.DataFrame(
+                columns=["source_variable", "target_code", "unique_participants"]
+            )
 
-        # Sort by config input order of source_variable, then by code within each var
-        grouped["_var_order"] = (
-            grouped["source_variable"]
+        # Left-join config with actual counts so all configured rows appear,
+        # defaulting to 0 participants when no long-table records were produced.
+        merged = mapped_config.merge(
+            actual_counts, on=["source_variable", "target_code"], how="left"
+        )
+        merged["unique_participants"] = merged["unique_participants"].fillna(0).astype(int)
+
+        # Sort by config input order, then by target_code within each variable
+        merged["_var_order"] = (
+            merged["source_variable"]
             .map(config_var_order)
             .fillna(len(config_var_order))
         )
-        grouped = grouped.sort_values(["_var_order", code_col]).drop(columns=["_var_order"])
+        merged = merged.sort_values(["_var_order", "target_code"]).drop(columns=["_var_order"])
 
-        grouped["pct_of_cohort"] = (
-            grouped["unique_participants"] / total_participants * 100
+        merged["pct_of_cohort"] = (
+            merged["unique_participants"] / total_participants * 100
         ).round(2)
 
-        rare_count = int((grouped["unique_participants"] <= self.rare_threshold).sum())
-        total_codes = grouped[code_col].nunique()
+        total_configured = len(merged)
+        # Rare: codes that did appear but with very few participants
+        rare_count = int(
+            merged["unique_participants"].between(1, self.rare_threshold).sum()
+        )
+        # Observed codes = those with at least one participant
+        total_observed_codes = int((merged["unique_participants"] > 0).sum())
 
-        # Return all records
         all_records: List[Dict] = []
-        for _, row in grouped.iterrows():
+        for _, row in merged.iterrows():
             all_records.append({
                 "source_variable": str(row["source_variable"] or ""),
-                "target_code": row[code_col],
-                "target_term": str(row.get(term_col, "") or ""),
+                "source_label": str(row["source_label"] or ""),
+                "target_code": str(row["target_code"] or ""),
+                "target_term": str(row["target_term"] or ""),
                 "unique_participants": int(row["unique_participants"]),
                 "pct_of_cohort": float(row["pct_of_cohort"]),
             })
@@ -467,11 +561,14 @@ class ETLValidator:
         return {
             "code_column": code_col,
             "total_cohort_participants (from wide table)": total_participants,
-            "total_unique_codes": total_codes,
+            "total_configured_entries": total_configured,
+            "total_observed_entries": total_observed_codes,
             "all_codes_by_prevalence": all_records,
-            f"rare_codes (unique_participants <= {self.rare_threshold})": rare_count,
-            "rare_pct_of_all_codes": (
-                round(rare_count / total_codes * 100, 2) if total_codes else 0.0
+            f"rare_codes (1 <= unique_participants <= {self.rare_threshold})": rare_count,
+            "rare_pct_of_observed": (
+                round(rare_count / total_observed_codes * 100, 2)
+                if total_observed_codes
+                else 0.0
             ),
             "PASS": True,  # Informational check; always passes
         }
@@ -490,12 +587,19 @@ class ETLValidator:
     ) -> Dict:
         """
         For every source_variable that carries a target_code or target_term,
-        compare the number of non-null wide-table values against the number of
+        compare the qualifying wide-table value count against the number of
         long-table rows whose {prefix}_source_text matches that variable's
         source_label.
 
-        Rows with a non-zero delta reveal exactly which variables have values
-        that were not converted (negative delta) or were duplicated (positive delta).
+        ``self.skipped_values`` controls which wide-table cell values are
+        excluded from the qualifying count:
+        - None (default) → all non-null cells qualify.
+        - A list such as ["0", "-1"] → non-null cells whose string value is
+          in the list are excluded (e.g. "not performed" / "unknown" sentinel).
+
+        Rows are returned in the source_variable order from the config file.
+        Rows with a non-zero delta reveal variables that were not converted
+        (negative delta) or were duplicated (positive delta).
         """
         source_text_col = f"{prefix}_source_text"
 
@@ -514,14 +618,25 @@ class ETLValidator:
                 .to_dict()
             )
 
+        # Precompute normalised skip set (covers both int-string and float-string forms)
+        sv_set = self._build_skip_set()
+
         rows: List[Dict] = []
-        for _, cfg_row in mapped.iterrows():
+        for config_order, (_, cfg_row) in enumerate(mapped.iterrows()):
             var = cfg_row["source_variable"]
             label = cfg_row["source_label"]
 
-            wide_count = (
-                int(wide_df[var].notna().sum()) if var in wide_df.columns else None
-            )
+            if var in wide_df.columns:
+                col = wide_df[var]
+                non_null = col.dropna()
+                if sv_set is not None:
+                    # Count non-null values NOT in skipped_values
+                    wide_count = int((~non_null.astype(str).isin(sv_set)).sum())
+                else:
+                    wide_count = int(len(non_null))
+            else:
+                wide_count = None
+
             long_count = int(long_counts.get(label, 0)) if has_source_text else None
             delta = (
                 (long_count - wide_count)
@@ -530,6 +645,7 @@ class ETLValidator:
             )
 
             rows.append({
+                "config_order": config_order,
                 "source_variable": var,
                 "source_label": label,
                 "wide_count": wide_count,
@@ -544,6 +660,7 @@ class ETLValidator:
 
         return {
             "source_text_column": source_text_col,
+            "skipped_values": self.skipped_values,
             "total_variables_checked": len(rows),
             "perfect_match": perfect,
             "mismatched": mismatched,
@@ -559,12 +676,45 @@ class ETLValidator:
     def _bool_badge(value: bool) -> str:
         return "✔ PASS" if value else "✖ FAIL"
 
+    def _build_skip_set(self) -> Optional[set]:
+        """
+        Build a normalised string set for matching against wide-table cell
+        values that should be skipped.
+
+        Pandas reads numeric columns as float64, so a source value of ``0``
+        becomes ``0.0`` in the DataFrame, and ``str(0.0)`` is ``"0.0"`` not
+        ``"0"``.  This helper expands every skip value to cover both the
+        plain integer-string form (``"0"``, ``"-1"``) and the float-string
+        form (``"0.0"``, ``"-1.0"``) so comparisons work regardless of how
+        pandas inferred the column dtype.
+
+        Returns ``None`` when ``self.skipped_values`` is not set.
+        """
+        if self.skipped_values is None:
+            return None
+        result: set = set()
+        for v in self.skipped_values:
+            s = str(v)
+            result.add(s)
+            try:
+                f = float(s)
+                result.add(str(f))       # e.g. "0" → "0.0"
+                result.add(str(int(f)))  # e.g. "0.0" → "0"
+            except (ValueError, OverflowError):
+                pass
+        return result
+
     def _render_completeness(self, result: Dict) -> List[str]:
+        sv = result.get("skipped_values")
+        wide_basis = (
+            f"non-null cells excluding {sv}" if sv is not None else "all non-null cells"
+        )
         lines = [
             "  ── Check 1: Completeness ──────────────────────────────────────",
             f"  Source variables in config              : {result['source_columns_in_config']}",
             f"  Source variables with code/term (counted): {result['source_columns_counted']}",
             f"  Source variables found in wide table    : {result['source_columns_found_in_wide']}",
+            f"  Wide count basis                        : {wide_basis}",
         ]
         if result["source_columns_missing_from_wide"]:
             lines.append(
@@ -572,7 +722,7 @@ class ETLValidator:
                 + "\n".join(f"      - {c}" for c in result["source_columns_missing_from_wide"])
             )
         lines += [
-            f"  Expected long-table rows           : {result['expected_long_rows (non-null wide values)']:,}",
+            f"  Expected long-table rows           : {result['expected_long_rows']:,}",
             f"  Actual long-table rows             : {result['actual_long_rows']:,}",
             f"  Delta (actual − expected)          : {result['delta (actual - expected)']:+,}",
             f"  Result  →  {self._bool_badge(result['PASS'])}",
@@ -589,17 +739,27 @@ class ETLValidator:
             return lines
 
         lines += [
-            f"  Expected source cols : {result['expected_source_columns']}",
-            f"  Observed source cols : {result['observed_source_columns']}",
+            f"  Expected source cols (mapped only) : {result['expected_source_columns']}",
+            f"  Observed source cols               : {result['observed_source_columns']}",
         ]
-        not_produced = result["not_produced (in config but absent from long table)"]
-        unexpected = result["unexpected (in long table but not in config)"]
 
-        if not_produced:
-            lines.append("  ⚠ Not produced (config → long table gap):")
-            lines += [f"      - {c}" for c in not_produced]
+        true_gaps = result.get("true_gaps (has wide data but absent from long table)", [])
+        expected_empty = result.get("expected_empty (no qualifying values in wide table)", [])
+        unexpected = result.get("unexpected (in long table but not in config)", [])
+
+        if true_gaps:
+            lines.append(
+                f"  ⚠ Not produced — wide data present but absent from long table ({len(true_gaps)}):"
+            )
+            lines += [f"      - {c}" for c in true_gaps]
         else:
-            lines.append("  ✔ All configured source columns produced output.")
+            lines.append("  ✔ All expected source columns produced output.")
+
+        if expected_empty:
+            lines.append(
+                f"  ℹ Expected empty — no qualifying values in wide table ({len(expected_empty)}):"
+            )
+            lines += [f"      - {c}" for c in expected_empty]
 
         if unexpected:
             lines.append("  ⚠ Unexpected source_text values (not in config):")
@@ -622,28 +782,35 @@ class ETLValidator:
 
         lines += [
             f"  Total cohort participants     : {total:,}",
-            f"  Total unique codes            : {result['total_unique_codes']:,}",
+            f"  Total configured entries      : {result['total_configured_entries']:,}",
+            f"  Entries with participants > 0 : {result['total_observed_entries']:,}",
             f"  {rare_key}  : {result[rare_key]} "
-            f"({result['rare_pct_of_all_codes']}% of all codes)",
+            f"({result['rare_pct_of_observed']}% of observed entries)",
             "",
-            f"  {'SOURCE_VARIABLE':<30} {'CODE':<20} {'TERM':<35} {'PARTICIPANTS':>12}  {'%COHORT':>8}",
-            f"  {'-'*30} {'-'*20} {'-'*35} {'-'*12}  {'-'*8}",
+            f"  {'SOURCE_VARIABLE':<25} {'SOURCE_LABEL':<30} {'CODE':<18} {'TERM':<30} {'PARTICIPANTS':>12}  {'%COHORT':>8}",
+            f"  {'-'*25} {'-'*30} {'-'*18} {'-'*30} {'-'*12}  {'-'*8}",
         ]
         for rec in result["all_codes_by_prevalence"]:
-            var_str = str(rec["source_variable"])[:29]
-            code_str = str(rec["target_code"])[:19]
-            term_str = str(rec["target_term"])[:34] if rec["target_term"] else ""
+            var_str = str(rec["source_variable"])[:24]
+            lbl_str = str(rec["source_label"])[:29]
+            code_str = str(rec["target_code"])[:17]
+            term_str = str(rec["target_term"])[:29] if rec["target_term"] else ""
             lines.append(
-                f"  {var_str:<30} {code_str:<20} {term_str:<35} "
+                f"  {var_str:<25} {lbl_str:<30} {code_str:<18} {term_str:<30} "
                 f"{rec['unique_participants']:>12,}  {rec['pct_of_cohort']:>7.2f}%"
             )
         lines.append(f"  Result  →  {self._bool_badge(result['PASS'])}  (informational)")
         return lines
 
     def _render_variable_gaps(self, result: Dict) -> List[str]:
+        sv = result.get("skipped_values")
+        wide_basis = (
+            f"non-null cells excluding {sv}" if sv is not None else "all non-null cells"
+        )
         lines = [
             "  ── Check 4: Per-Variable Gap Analysis ──────────────────────────",
             f"  Source-text column       : {result.get('source_text_column', 'N/A')}",
+            f"  Wide count basis         : {wide_basis}",
             f"  Variables checked        : {result['total_variables_checked']}",
             f"  Perfect match (delta=0)  : {result['perfect_match']}",
             f"  Mismatched               : {len(result['mismatched'])}",
@@ -660,7 +827,7 @@ class ETLValidator:
                 f"  {'SOURCE_VARIABLE':<35} {'WIDE':>6}  {'LONG':>6}  {'DELTA':>6}  NOTE",
                 f"  {'-'*35} {'-'*6}  {'-'*6}  {'-'*6}  {'-'*22}",
             ]
-            for r in sorted(result["mismatched"], key=lambda x: x["delta"]):
+            for r in sorted(result["mismatched"], key=lambda x: x["config_order"]):
                 wide = r["wide_count"] if r["wide_count"] is not None else "N/A"
                 long = r["long_count"] if r["long_count"] is not None else "N/A"
                 delta = r["delta"] if r["delta"] is not None else "N/A"
@@ -788,6 +955,20 @@ class ETLValidator:
                 all_passed = False
                 continue
 
+            # Apply the same eligibility filter to the long table so that
+            # all checks operate exclusively on eligible participants.
+            if roster is not None and self.long_pid_col in long_df.columns:
+                before = len(long_df)
+                long_df = long_df[
+                    long_df[self.long_pid_col].astype(str).isin(roster.astype(str))
+                ]
+                logger.info(
+                    "Long table '%s': eligibility filter applied: %d → %d rows retained.",
+                    entity,
+                    before,
+                    len(long_df),
+                )
+
             # --- Check 1 ---
             c1 = self.check_completeness(entity, entity_config, wide_df, long_df)
             entity_section_lines += self._render_completeness(c1)
@@ -797,7 +978,7 @@ class ETLValidator:
             entity_section_lines.append("")
 
             # --- Check 2 ---
-            c2 = self.check_column_coverage(entity, prefix, entity_config, long_df)
+            c2 = self.check_column_coverage(entity, prefix, entity_config, wide_df, long_df)
             entity_section_lines += self._render_coverage(c2)
             if not c2["PASS"]:
                 all_passed = False
@@ -940,6 +1121,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of top codes to show in prevalence table (default: 5).",
     )
     parser.add_argument(
+        "--skip-values",
+        nargs="+",
+        metavar="VAL",
+        default=None,
+        help=(
+            "One or more wide-table cell values to exclude from expected-row counts "
+            "in Checks 1, 2, and 4 (e.g. --skip-values 0 -1 for measurement entities "
+            "where 0 means 'not performed' and -1 means 'unknown'). "
+            "Values are matched as strings. When omitted, all non-null cells count."
+        ),
+    )
+    parser.add_argument(
         "--output",
         metavar="DIR",
         default=None,
@@ -963,6 +1156,7 @@ def main() -> None:
         rare_threshold=args.rare_threshold,
         top_n=args.top_n,
         long_suffix=args.long_suffix,
+        skipped_values=args.skip_values,
     )
 
     try:
