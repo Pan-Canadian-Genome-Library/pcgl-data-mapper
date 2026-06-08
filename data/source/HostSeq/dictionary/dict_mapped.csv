@@ -113,7 +113,7 @@ com_asthma,Asthma,"comorbidity_code, comorbidity_term",MONDO:0004979,asthma,como
 com_chronic_pulm,Chronic obstructive pulmonary disease (COPD),"comorbidity_code, comorbidity_term",MONDO:0005002,chronic obstructive pulmonary disease,comorbidity,confirmed | Term mismatch
 com_cystic_fibrosis,Cystic Fibrosis,"comorbidity_code, comorbidity_term",MONDO:0009061,cystic fibrosis,comorbidity,confirmed | Term mismatch
 com_sleep_apnea,Sleep Apnea,"comorbidity_code, comorbidity_term",MONDO:0005296,sleep apnea syndrome,comorbidity,confirmed | Term mismatch
-com_sleep_cpap,Home CPAP (continuous positive airway pressure) device used at night,"comorbidity_note | comorbidity_treatment_status, comorbidity_note",Under treatment,Home CPAP (continuous positive airway pressure) device used at night,comorbidity,
+com_sleep_cpap,Home CPAP (continuous positive airway pressure) device used at night,"comorbidity_note | comorbidity_treatment_status, comorbidity_note",,,comorbidity,
 com_chronic_kidney,Chronic kidney disease,"comorbidity_code, comorbidity_term",MONDO:0005300,chronic kidney disease,comorbidity,confirmed | Term mismatch
 com_liver,Liver disease,"comorbidity_code, comorbidity_term",MONDO:0005154,liver disorder,comorbidity,confirmed | Term mismatch
 com_gallbl,Gallbladder disease,"comorbidity_code, comorbidity_term",MONDO:0005281,gallbladder disorder,comorbidity,confirmed | Term mismatch

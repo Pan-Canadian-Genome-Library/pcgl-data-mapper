@@ -145,16 +145,16 @@ configs:
         source_type: checkbox
         create_records: true
         value_mappings:
-          com_transplant_type___1: ["icd10:Z94.1", "Heart transplant status", "Heart"]
-          com_transplant_type___2: ["icd10:Z94.0", "Kidney transplant status", "Kidney"]
-          com_transplant_type___3: ["icd10:Z94.4", "Liver transplant status", "Liver"]
-          com_transplant_type___4: ["icd10:Z94.83", "Pancreas transplant status", "Pancreas"]
-          com_transplant_type___5: ["icd10:Z94.82", "Intestine transplant status", "Intestine"]
-          com_transplant_type___6: ["icd10:Z94.2", "Lung transplant status", "Lung"]
-          com_transplant_type___7: ["icd10:Z94.7", "Corneal transplant status", "Eye (Cornea)"]
-          com_transplant_type___8: ["icd10:Z94.81", "Bone marrow transplant status", "Blood/bone marrow"]
-          com_transplant_type___9: ["icd10:Z95.828", "Presence of other vascular implants and grafts", "Blood vessel"]
-          com_transplant_type___10: ["icd10:Z94.9", "Transplanted organ and tissue status, unspecified", "Other"]
+          com_transplant_type___1: ["icd10:Z94.1", "Heart transplant status", "Organ type of transplant (choice=Heart)"]
+          com_transplant_type___2: ["icd10:Z94.0", "Kidney transplant status", "Organ type of transplant (choice=Kidney)"]
+          com_transplant_type___3: ["icd10:Z94.4", "Liver transplant status", "Organ type of transplant (choice=Liver)"]
+          com_transplant_type___4: ["icd10:Z94.83", "Pancreas transplant status", "Organ type of transplant (choice=Pancreas)"]
+          com_transplant_type___5: ["icd10:Z94.82", "Intestine transplant status", "Organ type of transplant (choice=Intestine)"]
+          com_transplant_type___6: ["icd10:Z94.2", "Lung transplant status", "Organ type of transplant (choice=Lung)"]
+          com_transplant_type___7: ["icd10:Z94.7", "Corneal transplant status", "Organ type of transplant (choice=Eye (Cornea))"]
+          com_transplant_type___8: ["icd10:Z94.81", "Bone marrow transplant status", "Organ type of transplant (choice=Blood/bone marrow)"]
+          com_transplant_type___9: ["icd10:Z95.828", "Presence of other vascular implants and grafts", "Organ type of transplant (choice=Blood vessel)"]
+          com_transplant_type___10: ["icd10:Z94.9", "Transplanted organ and tissue status, unspecified", "Organ type of transplant (choice=Other)"]
       - target_field: comorbidity_note
         target_type: note
         source_field: com_transplant_type_other
