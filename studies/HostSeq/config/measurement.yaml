@@ -236,7 +236,7 @@ configs:
   - source_field: lab_ddimer
     code: "LOINC:48065-7"
     term: "Fibrin D-dimer FEU [Mass/volume] in Platelet poor plasma"
-    source_label: "D-dimer"
+    source_label: "D-Dimer"
     enrichments:
       - target_field: measurement_result_numeric
         source_field: lab_ddimer_result
@@ -590,7 +590,7 @@ configs:
   - source_field: lab_echo
     code: "LOINC:18106-5"
     term: "Cardiac echo study Procedure"
-    source_label: "Echocardiography"
+    source_label: "Echocardiogram"
     enrichments:
       - target_field: measurement_result_categorical
         source_field: lab_echo
@@ -604,6 +604,7 @@ configs:
   # Blood Typing
   # =====================================================================
   - source_field: abo_type
+    use_skip_values: No
     code: "LOINC:883-9"
     term: "ABO group [Type] in Blood"
     source_label: "ABO blood type"
@@ -626,6 +627,7 @@ configs:
 
   
   - source_field: rh_factor
+    use_skip_values: No
     code: "LOINC:10331-7"
     term: "Rh [Type] in Blood"
     source_label: "Rh factor"
@@ -652,7 +654,7 @@ configs:
   - source_field: bp_sys
     code: "LOINC:8480-6"
     term: "Systolic blood pressure"
-    source_label: "Systolic blood pressure"
+    source_label: "Systolyc blood pressure"
     enrichments:
       - target_field: measurement_result_numeric
         source_field: bp_sys
@@ -701,9 +703,9 @@ configs:
           age_fallback_field: null
   
   - source_field: respiratory_rate
-    code: "LOINC:9279-1"
-    term: "Respiratory rate"
-    source_label: "Respiratory rate"
+    code: "LOINC:103219-2"
+    term: "Maximum respiratory rate"
+    source_label: "Highest respiratory rate"
     enrichments:
       - target_field: measurement_result_numeric
         source_field: respiratory_rate
@@ -733,32 +735,21 @@ configs:
           birth_date_field: birth_date
           event_date_field: date_admission
           age_fallback_field: null
-  
-  - source_field: oxygen_sat_on
-    code: "LOINC:3151-8"
-    term: "Inhaled oxygen flow rate"
-    source_label: null
-    enrichments:
-      - target_field: measurement_result_categorical
+      - target_field: measurement_note
         source_field: oxygen_sat_on
-        target_type: categorical
+        source_type: radio
         value_mappings:
-          0: "Room air"
-          1: "Oxygen therapy"
+          1: "Room air"
+          2: "Oxygen therapy"
           3: "N/A"
-      - target_field: age_at_measurement
-        target_type: age
-        params:
-          birth_date_field: birth_date
-          event_date_field: date_admission
-          age_fallback_field: null
+  
   
   # =====================================================================
   # Cardiac Markers
   # =====================================================================
   - source_field: lab_troponin
-    code: "LOINC:6598-7"
-    term: "Troponin T.cardiac [Mass/volume] in Serum or Plasma"
+    code: "LOINC:110288-8"
+    term: "Troponin T.cardiac [Measurement] in Serum or Plasma"
     source_label: "Troponin"
     enrichments:
       - target_field: measurement_result_numeric
@@ -767,10 +758,10 @@ configs:
       - target_field: [measurement_unit, measurement_unit_source_text]
         source_field: lab_troponin_unit
         value_mappings:
-          'hsTnT': ["UO:0000275", "hsTnT"]
-          'hsTnI': ["UO:0000275", "hsTnI"]
-          'TnT': ["UO:0000275", "TnT"]
-          'TnI': ["UO:0000275", "TnI"]
+          'hsTnT': [null, "hsTnT"]
+          'hsTnI': [null, "hsTnI"]
+          'TnT': [null, "TnT"]
+          'TnI': [null, "TnI"]
 
   
 
