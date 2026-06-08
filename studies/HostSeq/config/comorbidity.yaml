@@ -24,7 +24,7 @@ entity:
   params:
     participant_id_field: id_hostseq
     selection_type: radio
-    skip_values: [0, -1]  # Skip No and Don't know; allow Probable (value 2)
+    skip_values: [0]  # Skip No; allow Don't know (-1) and Not applicable (value 2)
 
 # =============================================================================
 # PREPROCESSING STEPS
@@ -102,6 +102,8 @@ mappings:
     source_type: radio
     value_mappings:
       1: "Active"
+      2: "Not applicable"  
+      -1: "Missing - Unknown"
   
   - target_field: comorbidity_treatment_status
     source_field: null
@@ -151,7 +153,7 @@ configs:
           com_transplant_type___6: ["icd10:Z94.2", "Lung transplant status", "Lung"]
           com_transplant_type___7: ["icd10:Z94.7", "Corneal transplant status", "Eye (Cornea)"]
           com_transplant_type___8: ["icd10:Z94.81", "Bone marrow transplant status", "Blood/bone marrow"]
-          com_transplant_type___9: ["icd10:Z95", "Presence of cardiac and vascular implants and grafts", "Blood vessel"]
+          com_transplant_type___9: ["icd10:Z95.828", "Presence of other vascular implants and grafts", "Blood vessel"]
           com_transplant_type___10: ["icd10:Z94.9", "Transplanted organ and tissue status, unspecified", "Other"]
       - target_field: comorbidity_note
         target_type: note
@@ -272,37 +274,20 @@ configs:
     code: "MONDO:0010811"
     term: "benign prostatic hyperplasia"
     source_label: "Benign Prostatic Hyperplasia"
-    enrichments:
-      - target_field: comorbidity_status
-        source_type: radio
-        value_mappings:
-          1: "Active"
-          2: "Not applicable"  # Mark value 2 for filtering
+
   
   - source_field: com_pcos
     code: "MONDO:0008487"
     term: "polycystic ovary syndrome"
     source_label: "Polycystic ovary syndrome (PCOS)"
-    enrichments:
-      - target_field: comorbidity_status
-        source_type: radio
-        value_mappings:
-          1: "Active"
-          2: "Not applicable"  # Mark value 2 for filtering
   
   # =====================================================================
   # Cardiovascular
   # =====================================================================
   - source_field: com_angio
-    code: "icd10:R69"
-    term: "Illness, unspecified"
-    source_label: null
-    enrichments:
-      - target_field: [comorbidity_treatment_status, comorbidity_note]
-        source_type: radio
-        value_mappings:
-          1: ["Under treatment", "Balloon angioplasty or percutanuous coronary intervention"]
-
+    code: "icd10:Z98.61"
+    term: "Coronary angioplasty status"
+    source_label: "Balloon angioplasty or percutanuous coronary intervention"
   
   - source_field: com_bypass
     code: "icd10:Z95.1"
@@ -328,8 +313,8 @@ configs:
         source_type: checkbox
         create_records: true
         value_mappings:
-          com_infarction_type1: ["MONDO:0005068", "Myocardial infarction", "Myocardial infarction Type I"]
-          com_infarction_type2: ["MONDO:0005068", "Myocardial infarction", "Myocardial infarction Type II"]
+          com_infarction_type1: ["MONDO:0005068", "myocardial infarction", "Myocardial infarction Type I"]
+          com_infarction_type2: ["MONDO:0005068", "myocardial infarction", "Myocardial infarction Type II"]
   
   - source_field: com_vascular
     code: "MONDO:0005294"
@@ -386,12 +371,12 @@ configs:
         source_type: checkbox
         create_records: true
         value_mappings:
-          com_leukemia: ["MONDO:0005059", "Leukemia", "Leukemia"]
-          com_lymphoma: ["MONDO:0005062", "Lymphoma", "Lymphoma"]
-          com_sarcoma: ["MONDO:0005089", "Sarcoma", "Sarcoma"]
-          com_carcinoma: ["MONDO:0004993", "Carcinoma", "Carcinoma"]
-          com_myeloma: ["MONDO:0009693", "Plasma cell myeloma", "Myeloma"]
-          com_cancer_mixedtypes: ["MONDO:0004992", "Cancer", "Mixed types"]
+          com_leukemia: ["MONDO:0005059", "leukemia", "Leukemia"]
+          com_lymphoma: ["MONDO:0005062", "lymphoma", "Lymphoma"]
+          com_sarcoma: ["MONDO:0005089", "sarcoma", "Sarcoma"]
+          com_carcinoma: ["MONDO:0004993", "carcinoma", "Carcinoma"]
+          com_myeloma: ["MONDO:0009693", "plasma cell myeloma", "Myeloma"]
+          com_cancer_mixedtypes: ["MONDO:0004992", "cancer", "Mixed types"]
       - target_field: comorbidity_note
         source_type: checkbox
         create_records: false
@@ -540,12 +525,12 @@ configs:
         source_type: checkbox
         create_records: true
         value_mappings:
-          bacteria_type___1: ["MONDO:0005114", "pneumococcal infection", "Streptococcus pneumoniae"]
-          bacteria_type___2: ["MONDO:0005545", "staphylococcus aureus infection", "Staphylococcus aureus"]
-          bacteria_type___3: ["MONDO:0011825", "streptococcus, group A, severity of infection by", "Group A streptococcus"]
-          bacteria_type___4: ["MONDO:0020920", "escherichia coli infection", "Escherichia coli"]
-          bacteria_type___5: ["MONDO:0030602", "Klebsiella pneumonia", "Klebsiella pneumoniae"]
-          bacteria_type___6: ["MONDO:0005113", "bacterial infectious disease", "Other"]
+          bacteria_type___1: ["MONDO:0005114", "pneumococcal infection", "Specify bacteria type (choice=Streptococcus pneumoniae)"]
+          bacteria_type___2: ["MONDO:0005545", "staphylococcus aureus infection", "Specify bacteria type (choice=Staphylococcus aureus)"]
+          bacteria_type___3: ["MONDO:0011825", "streptococcus, group A, severity of infection by", "Specify bacteria type (choice=Group A streptococcus)"]
+          bacteria_type___4: ["MONDO:0020920", "escherichia coli infection", "Specify bacteria type (choice=Escherichia coli)"]
+          bacteria_type___5: ["MONDO:0030602", "Klebsiella pneumonia", "Specify bacteria type (choice=Klebsiella pneumoniae)"]
+          bacteria_type___6: ["MONDO:0005113", "bacterial infectious disease", "Specify bacteria type (choice=Other)"]
       - target_field: comorbidity_note
         source_type: checkbox
         value_mappings:
@@ -563,7 +548,7 @@ configs:
   - source_field: other_infect_respiratory
     code: "MONDO:0024355"
     term: "respiratory tract infectious disorder"
-    source_label: "Other respiratory infection"
+    source_label: "Other infectious respiratory diagnosis"
     enrichments:
       - target_field: [comorbidity_status, comorbidity_note]
         source_type: radio
@@ -578,7 +563,7 @@ configs:
   - source_field: pneumonia
     code: "MONDO:0005249"
     term: "pneumonia"
-    source_label: "Pneumonia"
+    source_label: "Physician diagnosis of pneumonia"
   
   # =====================================================================
   # Other
@@ -586,7 +571,7 @@ configs:
   - source_field: com_other
     code: "MONDO:0000001"
     term: "disease"
-    source_label: "Other comorbidity"
+    source_label: "Other comorbidities"
     enrichments:
       - target_field: comorbidity_status
         default_value: "Active"
@@ -608,12 +593,6 @@ validations:
 # POST-PROCESSING STEPS
 # =============================================================================
 post_processing:
-  # Remove records marked as "Not applicable" (e.g., BPH/PCOS with value 2)
-  - type: filter_records
-    field: comorbidity_status
-    operator: not_equals
-    value: "Not applicable"
-
   - type: filter_records
     field: comorbidity_code
     operator: regex_match_any
