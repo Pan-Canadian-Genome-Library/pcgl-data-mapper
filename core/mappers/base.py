@@ -1575,16 +1575,18 @@ class EntityMapper:
                 
                 # Try to convert to int for numeric radio/checkbox values
                 # But also support string values for categorical radio buttons
+                # use_skip_values: Yes (default) applies skip_values; No always creates a record
+                apply_skip = str(config.get('use_skip_values', 'Yes')).strip().lower() not in ('no', 'false', '0')
                 numeric_value = None
                 try:
                     numeric_value = int(float(checkbox_value))
                     # Check if numeric value is in skip_values
-                    if numeric_value in skip_values:
+                    if apply_skip and numeric_value in skip_values:
                         continue
                 except (ValueError, TypeError):
                     # Non-numeric value (e.g., 'A', 'AB', 'O' for blood type)
                     # Check if the string representation is in skip_values
-                    if checkbox_value in skip_values or str(checkbox_value) in skip_values:
+                    if apply_skip and (checkbox_value in skip_values or str(checkbox_value) in skip_values):
                         continue
                     # Use the original value
                     pass
