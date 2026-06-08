@@ -102,7 +102,7 @@ com_transplant_type___5,Organ type of transplant (choice=Intestine),"comorbidity
 com_transplant_type___6,Organ type of transplant (choice=Lung),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z94.2,Lung transplant status,comorbidity,code look okay. same Q as above about using icd10 code- Z94.2? | Match
 com_transplant_type___7,Organ type of transplant (choice=Eye (Cornea)),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z94.7,Corneal transplant status,comorbidity,couldnt confirm an icd10 code | Match
 com_transplant_type___8,Organ type of transplant (choice=Blood/bone marrow),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z94.81,Bone marrow transplant status,comorbidity,code look okay. same Q as above about using icd10 code- Z94.81? | Match
-com_transplant_type___9,Organ type of transplant (choice=Blood vessel),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z95,Presence of cardiac and vascular implants and grafts,comorbidity,icd 10-Z95.828? | Match
+com_transplant_type___9,Organ type of transplant (choice=Blood vessel),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z95.828,Presence of other vascular implants and grafts,comorbidity,icd 10-Z95.828? | Match
 com_transplant_type___10,Organ type of transplant (choice=Other),"comorbidity_code, comorbidity_term, comorbidity_source_text",icd10:Z94.9,"Transplanted organ and tissue status, unspecified",comorbidity,icd10 Z94.9? | Match
 com_transplant_type_other,Specify other organ type of transplant,comorbidity_note,,,comorbidity,
 com_autoimm_rheum,"Autoimmune or rheumatologic disease (e.g., rheumatoid arthritis, systemic lupus erythematosus, multiple sclerosis, inflammaory bowel disease)","comorbidity_code, comorbidity_term",MONDO:0007179,autoimmune disease,comorbidity,confirmed | Term mismatch
@@ -123,13 +123,13 @@ com_ibs,Irritable Bowel Syndrome (IBS),"comorbidity_code, comorbidity_term",MOND
 com_lipids,"Lipid disorders (hypercholesterolemia, dyslipidemia, etc.)","comorbidity_code, comorbidity_term",icd10:E78,Disorders of lipoprotein metabolism and other lipidemias,comorbidity,"confirmed, deleted previous MONDO:0002525 as this was only for inherited disorders (too narrow) and used icd10:E78 code. This code has several sub-codes, is this ok to use for PCGL purposes? | Match"
 com_bph,Benign Prostatic Hyperplasia,"comorbidity_code, comorbidity_term",MONDO:0010811,benign prostatic hyperplasia,comorbidity,added and confirmed | Match
 com_pcos,Polycystic ovary syndrome (PCOS),"comorbidity_code, comorbidity_term",MONDO:0008487,polycystic ovary syndrome,comorbidity,confirmed | Term mismatch
-com_angio,Balloon angioplasty or percutanuous coronary intervention,"comorbidity_code, comorbidity_term",icd10:R69,"Illness, unspecified",comorbidity,Maybe Z95.5 or z98.6? | Code and term mismatch
+com_angio,Balloon angioplasty or percutanuous coronary intervention,"comorbidity_code, comorbidity_term",icd10:Z98.61,Coronary angioplasty status,comorbidity,Maybe Z95.5 or z98.6? | Code mismatch
 com_bypass,Coronary artery bypass,"comorbidity_code, comorbidity_term",icd10:Z95.1,Presence of aortocoronary bypass graft,comorbidity,confirmed | Match
 com_heart_failure,Congestive heart failure,"comorbidity_code, comorbidity_term",MONDO:0005009,congestive heart failure,comorbidity,deleted previous MONDO:0005252 (Heart failure) and replaced with MONDO:0005009 | Match
 com_hypertension,Hypertension,"comorbidity_code, comorbidity_term",MONDO:0005044,hypertensive disorder,comorbidity,confirmed | Term mismatch
 com_mi,Myocardial infarction,"comorbidity_code, comorbidity_term",MONDO:0005068,myocardial infarction,comorbidity,confirmed | Term mismatch
-com_infarction_type1,Myocardial infarction Type I,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005068,Myocardial infarction,comorbidity,Need to verify
-com_infarction_type2,Myocardial infarction Type II,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005068,Myocardial infarction,comorbidity,Need to verify
+com_infarction_type1,Myocardial infarction Type I,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005068,myocardial infarction,comorbidity,Need to verify
+com_infarction_type2,Myocardial infarction Type II,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005068,myocardial infarction,comorbidity,Need to verify
 com_vascular,Peripheral vascular disease,"comorbidity_code, comorbidity_term",MONDO:0005294,peripheral vascular disease,comorbidity,confirmed | Term mismatch
 com_stroke,Stroke,"comorbidity_code, comorbidity_term",MONDO:0005098,stroke disorder,comorbidity,confirmed | Term mismatch
 com_arrythmias,Arrythmias,"comorbidity_code, comorbidity_term",icd10:I49.9,"Cardiac arrhythmia, unspecified",comorbidity,added and confirmed | Match
@@ -138,12 +138,12 @@ com_dementia,Dementia,"comorbidity_code, comorbidity_term",MONDO:0001627,dementi
 com_neurological,Neurological or neuropsychiatric disease,"comorbidity_code, comorbidity_term",MONDO:0005071,nervous system disorder,comorbidity,confirmed | Term mismatch
 com_cancer,Is the patient currently diagnosed with cancer?,"comorbidity_code, comorbidity_term",MONDO:0004992,cancer,comorbidity,confirmed | Term mismatch
 com_cancer_age,Patient age at diagnosis,age_at_comorbidity_diagnosis,,,comorbidity,
-com_leukemia,Leukemia,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005059,Leukemia,comorbidity,confirmed | Match
-com_lymphoma,Lymphoma,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005062,Lymphoma,comorbidity,confirmed | Match
-com_sarcoma,Sarcoma,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005089,Sarcoma,comorbidity,confirmed | Match
-com_carcinoma,Carcinoma,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0004993,Carcinoma,comorbidity,confirmed | Match
-com_myeloma,Myeloma,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0009693,Plasma cell myeloma,comorbidity,confirmed | Match
-com_cancer_mixedtypes,Mixed types,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0004992,Cancer,comorbidity,confirmed. need to mention mixedtype in extension/ comments | Match
+com_leukemia,Leukemia,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005059,leukemia,comorbidity,confirmed | Term mismatch
+com_lymphoma,Lymphoma,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005062,lymphoma,comorbidity,confirmed | Term mismatch
+com_sarcoma,Sarcoma,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0005089,sarcoma,comorbidity,confirmed | Term mismatch
+com_carcinoma,Carcinoma,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0004993,carcinoma,comorbidity,confirmed | Term mismatch
+com_myeloma,Myeloma,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0009693,plasma cell myeloma,comorbidity,confirmed | Term mismatch
+com_cancer_mixedtypes,Mixed types,"comorbidity_code, comorbidity_term, comorbidity_source_text",MONDO:0004992,cancer,comorbidity,confirmed. need to mention mixedtype in extension/ comments | Term mismatch
 com_cancer_location___0,Cancer location (choice=Skin),comorbidity_note,,,comorbidity,
 com_cancer_location___1,Cancer location (choice=Lungs),comorbidity_note,,,comorbidity,
 com_cancer_location___2,Cancer location (choice=Breast),comorbidity_note,,,comorbidity,
@@ -225,7 +225,7 @@ covid19_vaccine_4_date,Date of fourth dose of COVID-19 vaccine received or sched
 covid19_vaccine_4_name,Name of fourth dose of COVID-19 vaccine,"exposure_code, exposure_term",snomedct:28531000087107,COVID-19 vaccine,exposure,Confirmed. do we need to mention the dose in the extension/ comments column | Term mismatch
 covid19_vaccine_4_desc,Please specify the name of the fourth dose of COVID-19 vaccine,exposure_note,,,exposure,
 heart_rate,Heart rate,"measurement_code, measurement_term | measurement_result_numeric",LOINC:8867-4,Heart rate,measurement,Confirmed | Match | Confirmed | Match
-respiratory_rate,Highest respiratory rate,"measurement_code, measurement_term | measurement_result_numeric",LOINC:103219-2,Maximum respiratory rate,measurement,Confirmed | Code and term mismatch | Confirmed | Code and term mismatch
+respiratory_rate,Highest respiratory rate,"measurement_code, measurement_term | measurement_result_numeric",LOINC:103219-2,Maximum respiratory rate,measurement,Confirmed | Match | Confirmed | Match
 bp_sys,Systolyc blood pressure,"measurement_code, measurement_term | measurement_result_numeric",LOINC:8480-6,Systolic blood pressure,measurement,Confirmed | Match | Confirmed | Match
 bp_dia,Diastolic blood pressure,"measurement_code, measurement_term | measurement_result_numeric",LOINC:8462-4,Diastolic blood pressure,measurement,Confirmed | Match | Confirmed | Match
 oxygen_sat,Oxygen saturation,"measurement_code, measurement_term | measurement_result_numeric",LOINC:20564-1,Oxygen saturation in Blood,measurement,I think 20564-1 might fit this better | Term mismatch | I think 20564-1 might fit this better | Term mismatch
