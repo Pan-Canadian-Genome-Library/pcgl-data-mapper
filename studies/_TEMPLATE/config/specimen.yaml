@@ -45,17 +45,23 @@ preprocessing:
   # ADD MORE PREPROCESSING STEPS HERE
 
 # Optional filters to apply before mapping
-filters: 
+filters:
   # Template:
   # participant_id_field: participant_id  # CUSTOMIZE
-  # eligible_participants: true
-  # include_rows:
-  #   baseline: true
-  #   repeat_instruments: []
-  # field_filters:
-  #   - field: source_field_name
-  #     operator: equals/not_equals/greater_than/...
-  #     value: some_value
+  #
+  # # Step 1: Participant eligibility (filter which participants to include)
+  # participant:
+  #   filter:
+  #     - field: source_field_name  # CUSTOMIZE
+  #       op: equals               # Options: equals, not_equals, is_null, is_not_null, greater_than, less_than
+  #       value: some_value        # Omit for is_null/is_not_null
+  #
+  # # Step 2: Row selection (filter which rows to process per participant)
+  # rows:
+  #   - name: baseline            # CUSTOMIZE name
+  #     filter:
+  #       - field: source_field_name  # CUSTOMIZE
+  #         op: is_null
   # ADD MORE FILTERS HERE
 
 # These create the default mapping logic for each field in a mapped record

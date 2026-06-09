@@ -1,6 +1,7 @@
 # PCGL Data Mapper Framework Requirements
 
 # Core dependencies
+setuptools>=60.0  # provides distutils shim for Python 3.12+ compatibility
 pandas>=1.5.0
 numpy>=1.23.0
 pyyaml>=6.0
