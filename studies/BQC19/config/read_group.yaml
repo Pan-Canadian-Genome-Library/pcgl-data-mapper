@@ -1,0 +1,238 @@
+# BQC19 Study - Read Group Entity Mapping Configuration
+#
+# Target Entity: ReadGroup (PCGL Base Schema)
+# Source: RNAseq file manifest (one row per file — R1, R2, I1, I2 each have their own row)
+#
+# Manifest columns:
+#   fileName          → FASTQ filename, e.g. BQC0001.SAMPLE01.R1.fastq.gz
+#   BQCID             → BQC19 participant ID
+#   sample_code       → the SAMPLE token in the filename; links files to samples
+#   dob_year          → year of birth  (used by other entities, not read_group)
+#   dob_month         → month of birth (used by other entities, not read_group)
+#   dob_day           → day of birth   (used by other entities, not read_group)
+#   draw_date         → specimen draw date (used by other entities, not read_group)
+#   specimen_number   → submitter_specimen_id
+#   sample_number     → submitter_sample_id
+#   experiment_number → submitter_experiment_id
+#   analysis_number   → submitter_analysis_id  (not a read_group field)
+#   workflow_number   → submitter_workflow_id   (not a read_group field)
+#   read_group_number → submitter_read_group_id
+#
+# Strategy:
+#   - Preprocessing: derive file_r2 by regex_replace on fileName (.R1. → .R2.)
+#   - Filter to R1 rows only → one row per read group pair
+#   - file_r1 = fileName  (direct)
+#   - file_r2 = derived file_r2 column (from preprocessing step)
+#   - I1/I2 index reads are excluded
+#
+# Since only filename-level metadata is available, optional fields (read_length,
+# insert_size, platform_unit) are left null until run QC data is obtained.
+#
+# Pattern: Direct mapping (one read group per R1 row after filtering)
+
+entity:
+  name: ReadGroup
+  schema: [base]
+
+  source_files:
+    primary: "rnaseq_manifest.csv"  # CUSTOMIZE: exact filename of the manifest
+
+  fields:
+    base:
+      # Required
+      - submitter_read_group_id
+      - submitter_experiment_id
+      - file_r1
+      - file_r2           # Conditional required — always present here (paired-end run)
+      - library_name
+      - library_layout
+      - platform_unit
+      # Optional — not derivable from filename alone; populate when metadata is available
+      - library_description
+      - read_group_id_in_bam
+      - read_length_r1
+      - read_length_r2
+      - insert_size
+
+  pattern: direct
+
+# =============================================================================
+# PREPROCESSING
+# =============================================================================
+preprocessing:
+  # Derive file_r2 by swapping the read-end token in fileName before the row
+  # filter runs.  Uses the regex_replace preprocessing step (core/mappers/base.py)
+  # which applies pandas Series.str.replace() — no explicit column needed in the
+  # manifest.  regex: false treats the pattern as a literal substring.
+  - type: regex_replace
+    source_field: fileName
+    target_field: file_r2
+    pattern: '.R1.'
+    replacement: '.R2.'
+    regex: false
+
+# =============================================================================
+# FILTERS
+# =============================================================================
+filters:
+  participant_id_field: "BQCID"
+
+  rows:
+    - name: r1_reads_only
+      filter:
+        # Keep only R1 rows — one row per read group pair.
+        # I1/I2 index reads and R2 reads are excluded here;
+        # file_r2 is derived in the preprocessing step above.
+        - field: fileName
+          op: regex_match_any
+          value: ['.*\.R1\..*']  # matches any filename containing ".R1."
+
+# =============================================================================
+# MAPPINGS
+# =============================================================================
+mappings:
+  # ---------------------------------------------------------------------------
+  # Read Group Identifier
+  # Source: read_group_number → submitter_read_group_id
+  # ---------------------------------------------------------------------------
+  - source_field: read_group_number
+    target_field: submitter_read_group_id
+    source_label: "Read group number from manifest"
+    target_type: value  # pre-formed ID in the manifest; no composition needed
+
+  # ---------------------------------------------------------------------------
+  # Experiment Identifier
+  # Source: experiment_number → submitter_experiment_id
+  # ---------------------------------------------------------------------------
+  - source_field: experiment_number
+    target_field: submitter_experiment_id
+    source_label: "Experiment number from manifest"
+    target_type: value  # pre-formed ID in the manifest; no composition needed
+
+  # ---------------------------------------------------------------------------
+  # R1 File
+  # Source: fileName (row is already filtered to R1 files only)
+  # ---------------------------------------------------------------------------
+  - source_field: fileName
+    target_field: file_r1
+    source_label: "R1 FASTQ filename"
+    target_type: value
+
+  # ---------------------------------------------------------------------------
+  # R2 File
+  # Source: file_r2 column derived in preprocessing by replacing .R1. → .R2.
+  # ---------------------------------------------------------------------------
+  - source_field: file_r2
+    target_field: file_r2
+    source_label: "R2 FASTQ filename (derived from file_r1)"
+    target_type: value
+    default_value: null
+
+  # ---------------------------------------------------------------------------
+  # Library Name
+  # Source: sample_code — the SAMPLE token shared between paired files.
+  # CUSTOMIZE if a more descriptive library name is available.
+  # ---------------------------------------------------------------------------
+  - source_field: sample_code
+    target_field: library_name
+    source_label: "Sample code from manifest (matches SAMPLE in filename)"
+    target_type: value
+
+  # ---------------------------------------------------------------------------
+  # Library Layout
+  # All BQC19 RNAseq files are paired-end (R1 + R2 present).
+  # Hardcoded to PAIRED; update if single-end libraries are ever included.
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: library_layout
+    source_label: null
+    target_type: value
+    default_value: "OBI:0000722 (paired-end library)"
+
+  # ---------------------------------------------------------------------------
+  # Platform Unit
+  # Ideally {FLOWCELL_BARCODE}.{LANE}.{SAMPLE_BARCODE}.
+  # Flow cell / lane info is not in the manifest; using read_group_number as
+  # a placeholder — CUSTOMIZE once BAM headers or sequencer run info is available.
+  # ---------------------------------------------------------------------------
+  - source_field: read_group_number
+    target_field: platform_unit
+    source_label: "Read group number (placeholder for full platform unit)"
+    target_type: value
+
+  # ---------------------------------------------------------------------------
+  # Library Description  (Optional)
+  # Not available in the manifest.
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: library_description
+    source_label: null
+    target_type: value
+    default_value: null
+
+  # ---------------------------------------------------------------------------
+  # Read Group ID in BAM  (Optional)
+  # Not applicable for FASTQ submissions.
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: read_group_id_in_bam
+    source_label: null
+    target_type: value
+    default_value: null
+
+  # ---------------------------------------------------------------------------
+  # Read Length R1  (Optional)
+  # Not in the manifest; populate from run QC reports if available.
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: read_length_r1
+    source_label: null
+    target_type: value
+    default_value: null
+
+  # ---------------------------------------------------------------------------
+  # Read Length R2  (Optional)
+  # Not in the manifest; populate from run QC reports if available.
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: read_length_r2
+    source_label: null
+    target_type: value
+    default_value: null
+
+  # ---------------------------------------------------------------------------
+  # Insert Size  (Optional)
+  # Not in the manifest; populate from alignment QC stats if available.
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: insert_size
+    source_label: null
+    target_type: value
+    default_value: null
+
+# =============================================================================
+# VALIDATION RULES
+# =============================================================================
+validations:
+  - type: required
+    field: submitter_read_group_id
+
+  - type: required
+    field: submitter_experiment_id
+
+  - type: required
+    field: file_r1
+
+  - type: required
+    field: library_name
+
+  - type: required
+    field: library_layout
+
+  - type: required
+    field: platform_unit
+
+# =============================================================================
+# POST-PROCESSING
+# =============================================================================
+post_processing: []

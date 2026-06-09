@@ -1,0 +1,169 @@
+# Read Group Entity Configuration Template
+#
+# PCGL Base Schema: Read Group
+# Describes a set of reads from a single sequencing run and instrument lane.
+# All base fields are pre-defined below - customize source_field and source_label for your study
+
+entity:
+  name: ReadGroup
+
+  # Optional: Multi-file input support
+  # Uncomment and customize to load from specific CSV file(s)
+  # source_files:
+  #   primary: "read_groups.csv"
+  #   # Optional: Join additional files if needed
+  #   # secondary:
+  #   #   - file: "experiments.csv"
+  #   #     join_on: submitter_experiment_id
+  #   #     columns: [platform, platform_model]
+
+  fields:
+    base:
+      # Required fields
+      - submitter_read_group_id     # Required: unique within each payload
+      - submitter_experiment_id     # Required: unique experiment identifier within the study
+      - file_r1                     # Required: sequencing file for the first end of a run
+      - file_r2                     # Conditional required: sequencing file for the second end (paired-end only)
+      - library_name                # Required: name of the sequencing library
+      - library_layout              # Required: paired-end or single-end
+      - platform_unit               # Required: unique identifier for each read group (e.g. {FLOWCELL}.{LANE}.{SAMPLE_BARCODE})
+      # Optional fields
+      - library_description         # Optional: description of the nucleotide sequencing library
+      - read_group_id_in_bam        # Optional: @RG ID in the BAM header (not applicable to FASTQ files)
+      - read_length_r1              # Optional: length of reads in file_r1 (number of sequencing cycles)
+      - read_length_r2              # Optional: length of reads in file_r2 (number of sequencing cycles)
+      - insert_size                 # Optional: average insert size for paired-end sequencing
+    # optionally include extension fields
+    # extension:
+      # Template: Add any extension fields needed for your study
+      # - read_group_note
+      # ADD MORE EXTENSION FIELDS HERE
+
+  pattern: direct
+
+# Optional preprocessing steps before mapping
+preprocessing:
+  # Template:
+  # - type: clean_numeric/strip_whitespace/...
+  #   fields: []  # CUSTOMIZE
+  # ADD MORE PREPROCESSING STEPS HERE
+
+# Optional filters to apply before mapping
+filters:
+  # Template:
+  # participant_id_field: participant_id  # CUSTOMIZE
+  #
+  # # Step 1: Participant eligibility (filter which participants to include)
+  # participant:
+  #   filter:
+  #     - field: source_field_name  # CUSTOMIZE
+  #       op: equals               # Options: equals, not_equals, is_null, is_not_null, greater_than, less_than
+  #       value: some_value        # Omit for is_null/is_not_null
+  #
+  # # Step 2: Row selection (filter which rows to process per participant)
+  # rows:
+  #   - name: baseline            # CUSTOMIZE name
+  #     filter:
+  #       - field: source_field_name  # CUSTOMIZE
+  #         op: is_null
+  # ADD MORE FILTERS HERE
+
+# These create the default mapping logic for each field in a mapped record
+mappings:
+  # CUSTOMIZE: Add entries for each field in the mapped record
+  # Template:
+  # - target_field: your_target_field
+  #   target_type: value/age/identifier/...
+  #   source_field: null  # CUSTOMIZE
+  #   source_label: null  # CUSTOMIZE
+  #   params: {}  # CUSTOMIZE if needed
+  #   value_mappings: {}  # CUSTOMIZE if needed
+  #   default_value: null  # CUSTOMIZE if needed
+
+  # --- Required fields ---
+  - target_field: submitter_read_group_id
+    target_type: identifier
+    source_field: null  # CUSTOMIZE
+    source_label: null  # CUSTOMIZE
+
+  - target_field: submitter_experiment_id
+    target_type: identifier
+    source_field: null  # CUSTOMIZE
+    source_label: null  # CUSTOMIZE
+
+  - target_field: file_r1
+    target_type: value
+    source_field: null  # CUSTOMIZE
+    source_label: null  # CUSTOMIZE
+
+  - target_field: library_name
+    target_type: value
+    source_field: null  # CUSTOMIZE
+    source_label: null  # CUSTOMIZE
+
+  - target_field: library_layout
+    target_type: value
+    source_field: null  # CUSTOMIZE
+    source_label: null  # CUSTOMIZE
+    value_mappings: {}  # CUSTOMIZE: e.g. 1: "PAIRED", 2: "SINGLE"
+
+  - target_field: platform_unit
+    target_type: value
+    source_field: null  # CUSTOMIZE
+    source_label: null  # CUSTOMIZE
+
+  # --- Conditional required field ---
+  - target_field: file_r2
+    target_type: value
+    source_field: null  # CUSTOMIZE: only populated for paired-end libraries
+    source_label: null  # CUSTOMIZE
+    default_value: null
+
+  # --- Optional fields ---
+  - target_field: library_description
+    target_type: value
+    source_field: null  # CUSTOMIZE
+    source_label: null  # CUSTOMIZE
+    default_value: null
+
+  - target_field: read_group_id_in_bam
+    target_type: value
+    source_field: null  # CUSTOMIZE: leave null for FASTQ submissions
+    source_label: null  # CUSTOMIZE
+    default_value: null
+
+  - target_field: read_length_r1
+    target_type: value
+    source_field: null  # CUSTOMIZE
+    source_label: null  # CUSTOMIZE
+    default_value: null
+
+  - target_field: read_length_r2
+    target_type: value
+    source_field: null  # CUSTOMIZE: only relevant for paired-end libraries
+    source_label: null  # CUSTOMIZE
+    default_value: null
+
+  - target_field: insert_size
+    target_type: value
+    source_field: null  # CUSTOMIZE: only relevant for paired-end libraries
+    source_label: null  # CUSTOMIZE
+    default_value: null
+
+  # ADD MORE FIELD MAPPINGS HERE
+
+# Optional Validations
+validations:
+  # CUSTOMIZE: Add validation rules as needed
+  # Template:
+  # - type: your_validation_type
+  #   field: your_field_name
+  # ADD MORE VALIDATIONS HERE
+
+# Optional Post-processing
+post_processing:
+  # CUSTOMIZE: Add post-processing steps as needed
+  # Template:
+  # - type: your_post_processing_type
+  #   columns: []  # CUSTOMIZE
+  # ADD MORE POST-PROCESSING STEPS HERE

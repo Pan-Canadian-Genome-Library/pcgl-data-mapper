@@ -871,6 +871,63 @@ class EntityMapper:
                         f"Invalid calculate_field formula for '{target}': {formula}\n"
                         f"Error: {e}"
                     ) from e
+
+            elif step_type == 'regex_replace':
+                # Derive a new (or updated) column by applying a string replacement to an existing column.
+                # Supports both literal substring replacement (regex: false) and regex patterns (regex: true).
+                #
+                # Config keys:
+                #   source_field  (required) – column to read from
+                #   target_field  (optional) – column to write to; defaults to source_field (in-place)
+                #   pattern       (required) – substring or regex pattern to find
+                #   replacement   (required) – string to substitute in place of the match
+                #   regex         (optional, default true) – treat pattern as a regex; set false for literal replace
+                #
+                # Example (derive file_r2 from file_r1 by swapping the read-end token):
+                #   - type: regex_replace
+                #     source_field: fileName
+                #     target_field: file_r2
+                #     pattern: '\.R1\.'
+                #     replacement: '.R2.'
+                source_field = step.get('source_field')
+                target_field = step.get('target_field', source_field)  # default: in-place
+                pattern = step.get('pattern')
+                replacement = step.get('replacement', '')
+                use_regex = step.get('regex', True)
+
+                if not source_field or pattern is None:
+                    self.logger.warning(
+                        "Skipping regex_replace: missing 'source_field' or 'pattern'"
+                    )
+                    continue
+
+                if source_field not in df.columns:
+                    self.logger.warning(
+                        f"Skipping regex_replace: source column '{source_field}' not found in data"
+                    )
+                    continue
+
+                import re
+                try:
+                    df[target_field] = (
+                        df[source_field]
+                        .astype(str)
+                        .str.replace(pattern, replacement, regex=use_regex)
+                    )
+                    self.logger.info(
+                        f"regex_replace: '{source_field}' → '{target_field}' "
+                        f"(pattern={pattern!r}, replacement={replacement!r}, regex={use_regex})"
+                    )
+                except re.error as e:
+                    self.logger.error(
+                        f"Invalid regex pattern in regex_replace for '{source_field}': {e}\n"
+                        f"Pattern: {pattern!r}\n"
+                        f"Hint: Escape special characters (e.g. use r'\\.R1\\.' instead of '.R1.'), "
+                        f"or set 'regex: false' for literal substring replacement."
+                    )
+                    raise ValueError(
+                        f"Invalid regex_replace pattern {pattern!r}: {e}"
+                    ) from e
             
             elif step_type == 'construct_date':
                 # Construct date from year/month/day components OR back-calculate from event date + age
