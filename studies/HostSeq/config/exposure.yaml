@@ -138,8 +138,8 @@ configs:
         source_field: [vaping_amount, vaping_amount_other]
   
   - source_field: cannabis
-    code: "snomedct:398705004"
-    term: "Cannabis"
+    code: "snomedct:733460004"
+    term: "Marijuana user"
     source_label: "Cannabis"
     enrichments:
       - target_field: exposure_status
@@ -160,7 +160,7 @@ configs:
   - source_field: covid19_vaccine
     code: "snomedct:28531000087107"
     term: "COVID-19 vaccine"
-    source_label: "COVID-19 Vaccination"
+    source_label: "COVID-19 vaccination status"
     enrichments:
       - target_field: exposure_status
         source_type: radio
@@ -190,9 +190,9 @@ configs:
   - source_field: covid19_vaccine_1_name
     code: "snomedct:28531000087107"
     term: "COVID-19 vaccine"
-    source_label: "COVID-19 Vaccine Dose 1"
+    source_label: "Name of the first dose of COVID-19 vaccine"
     enrichments:
-      - target_field: [exposure_status, exposure_source_text]
+      - target_field: [exposure_status, exposure_note]
         source_type: radio
         value_mappings:
           0: ["Current", "Pfizer", ]
@@ -219,9 +219,9 @@ configs:
   - source_field: covid19_vaccine_2_name
     code: "snomedct:28531000087107"
     term: "COVID-19 vaccine"
-    source_label: "COVID-19 Vaccine Dose 2"
+    source_label: "Name of second dose of COVID-19 vaccine"
     enrichments:
-      - target_field: [exposure_status, exposure_source_text]
+      - target_field: [exposure_status, exposure_note]
         source_type: radio
         value_mappings:
           0: ["Current", "Pfizer"]
@@ -248,9 +248,9 @@ configs:
   - source_field: covid19_vaccine_3_name
     code: "snomedct:28531000087107"
     term: "COVID-19 vaccine"
-    source_label: "COVID-19 Vaccine Dose 3"
+    source_label: "Name of third dose of COVID-19 vaccine"
     enrichments:
-      - target_field: [exposure_status, exposure_source_text]
+      - target_field: [exposure_status, exposure_note]
         source_type: radio
         value_mappings:
           0: ["Current", "Pfizer"]
@@ -277,9 +277,9 @@ configs:
   - source_field: covid19_vaccine_4_name
     code: "snomedct:28531000087107"
     term: "COVID-19 vaccine"
-    source_label: "COVID-19 Vaccine Dose 4"
+    source_label: "Name of fourth dose of COVID-19 vaccine"
     enrichments:
-      - target_field: [exposure_status, exposure_source_text]
+      - target_field: [exposure_status, exposure_note]
         source_type: radio
         value_mappings:
           0: ["Current", "Pfizer"]
@@ -309,7 +309,7 @@ configs:
   - source_field: bcg
     code: "snomedct:151071000119107"
     term: "Bacillus Calmette-Guerin vaccination given"
-    source_label: "BCG Vaccine"
+    source_label: "Has the patient received BCG vaccine?"
     enrichments:
       - target_field: exposure_status
         source_type: radio
