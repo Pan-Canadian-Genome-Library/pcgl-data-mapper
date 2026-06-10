@@ -113,7 +113,7 @@ com_asthma,Asthma,"comorbidity_code, comorbidity_term",MONDO:0004979,asthma,como
 com_chronic_pulm,Chronic obstructive pulmonary disease (COPD),"comorbidity_code, comorbidity_term",MONDO:0005002,chronic obstructive pulmonary disease,comorbidity,confirmed | Term mismatch
 com_cystic_fibrosis,Cystic Fibrosis,"comorbidity_code, comorbidity_term",MONDO:0009061,cystic fibrosis,comorbidity,confirmed | Term mismatch
 com_sleep_apnea,Sleep Apnea,"comorbidity_code, comorbidity_term",MONDO:0005296,sleep apnea syndrome,comorbidity,confirmed | Term mismatch
-com_sleep_cpap,Home CPAP (continuous positive airway pressure) device used at night,"comorbidity_note | comorbidity_treatment_status, comorbidity_note",,,comorbidity,
+com_sleep_cpap,Home CPAP (continuous positive airway pressure) device used at night,"comorbidity_note | comorbidity_treatment_status, comorbidity_note",Under treatment,Home CPAP (continuous positive airway pressure) device used at night,comorbidity,
 com_chronic_kidney,Chronic kidney disease,"comorbidity_code, comorbidity_term",MONDO:0005300,chronic kidney disease,comorbidity,confirmed | Term mismatch
 com_liver,Liver disease,"comorbidity_code, comorbidity_term",MONDO:0005154,liver disorder,comorbidity,confirmed | Term mismatch
 com_gallbl,Gallbladder disease,"comorbidity_code, comorbidity_term",MONDO:0005281,gallbladder disorder,comorbidity,confirmed | Term mismatch
@@ -176,7 +176,7 @@ tobacco_other,"Other forms and amount of current tobacco use (e.g., cigar, chew 
 vaping,Vaping,"exposure_code, exposure_term",snomedct:722499006,Electronic cigarette user,exposure,confirmed | Code and term mismatch
 vaping_amount,Average number of cartilages per week,exposure_note,,,exposure,
 vaping_amount_other,Other measurement of vaping use,exposure_note,,,exposure,
-cannabis,Cannabis,"exposure_code, exposure_term",snomedct:398705004,Cannabis,exposure,"confirmed, deleted previous NCIT:C34445 (Cannabis dependence), as the HostSeq cannabis variable is yes/no on cannabis use. The participant is not necessarily dependent. | Code and term mismatch"
+cannabis,Cannabis,"exposure_code, exposure_term",snomedct:733460004,Marijuana user,exposure,"confirmed, deleted previous NCIT:C34445 (Cannabis dependence), as the HostSeq cannabis variable is yes/no on cannabis use. The participant is not necessarily dependent. | Code and term mismatch"
 cannabis_amount,Average number of joints/bong per week,exposure_note,,,exposure,
 cannabis_amount_other,Other measurement of cannabis use,exposure_note,,,exposure,
 comorbidities_complete,Complete?,,,,,
@@ -458,16 +458,16 @@ inhaled_no,Inhaled nitric oxide,"procedure_code, procedure_term | treatment_code
 trach,Tracheostomy inserted,"procedure_code, procedure_term | treatment_code, treatment_term",snomedct:232685002,Insertion of tracheostomy tube,"procedure, treatment","confirmed, Replaced snomedct:21619009 (Permanent tracheostomy) with 232685002. | Match | Need to verify"
 extracorp,Extracorporeal support,"procedure_code, procedure_term | treatment_code, treatment_term",snomedct:232969009,Cardiac support using extracorporeal membrane oxygenation circuitry,"procedure, treatment","Cannot identify a code for this, make extended variable | Code and term mismatch | Need to verify"
 dialysis,Renal replacement therapy (RRT) or dialysis,"procedure_code, procedure_term | treatment_code, treatment_term",snomedct:265764009,Renal dialysis,"procedure, treatment",confirmed | Match | Need to verify
-inotrop_vasopress,Inotropes/vasopressors,"procedure_code, procedure_term | treatment_code, treatment_term",NCIT:C191468,Implantation of Temporary Mechanical Circulatory Support Device,"procedure, treatment","Cannot identify a code for this, make extended variable | Code and term mismatch | Need to verify"
+inotrop_vasopress,Inotropes/vasopressors,"procedure_code, procedure_term | treatment_code, treatment_term",snomedct:1296972008 | snomedct:870386000,Inotropic therapy | Vasopressor therapy,"procedure, treatment","Cannot identify a code for this, make extended variable | Match | Cannot identify a code for this, make extended variable | Match | Need to verify"
 inotrop_vasopress_start,Inotropes/vasopressors start date,age_at_treatment | treatment_duration,,,treatment,
 inotrop_vasopress_end,Inotropes/vasopressors end date,treatment_duration,,,treatment,
 other_intervention,Other intervention or procedure,"treatment_code, treatment_term",,,treatment,
 other_intervention_desc,Please sepcify other intervention or procedure,treatment_note,,,treatment,
 antiviral,Antiviral agent,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C281,Antiviral Agent,"medication, treatment",Need to verify | Need to verify
-antiviral_ribavirin,Ribavirin,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C807,Ribavirin,"medication, treatment",confirmed | Code mismatch | Need to verify
-antiviral_lopin_riton,Lopinavir/Ritonavir,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C2096,Lopinavir/Ritonavir,"medication, treatment",confirmed | Code and term mismatch | Need to verify
+antiviral_ribavirin,Ribavirin,"medication_code, medication_term | treatment_code, treatment_term",rxnorm:9344,ribavirin,"medication, treatment",confirmed | Term mismatch | Need to verify
+antiviral_lopin_riton,Lopinavir/Ritonavir,"medication_code, medication_term | treatment_code, treatment_term",rxnorm:284640,lopinavir/ritonavir,"medication, treatment",confirmed | Term mismatch | Need to verify
 antiviral_interf_a,Interferon alpha,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C20494,Interferon Alpha,"medication, treatment","Cannot identify a code for this, make extended variable | Code and term mismatch | Need to verify"
-antiviral_interf_b,Interferon beta,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C20495,Interferon Beta,"medication, treatment",confirmed | Code and term mismatch | Need to verify
+antiviral_interf_b,Interferon beta,"medication_code, medication_term | treatment_code, treatment_term",rxnorm:4381,interferon-beta,"medication, treatment",confirmed | Term mismatch | Need to verify
 antiviral_neur_inhibitor,Neuraminidase inhibitor,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C217656,Neuraminidase Inhibitor,"medication, treatment",added and confirmed | Match | Need to verify
 antiviral_other,Other antiviral agent,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C281,Antiviral Agent,"medication, treatment",Need to verify | Need to verify
 antiviral_other_name,Specify other antiviral agent,drug_note | treatment_note,,,"medication, treatment",
@@ -489,7 +489,7 @@ antifungal,Antifungal agent,"medication_code, medication_term | treatment_code, 
 colchicine,Colchicine,"medication_code, medication_term | treatment_code, treatment_term",rxnorm:2683,colchicine,"medication, treatment",confirmed | Term mismatch | Need to verify
 chloroq,Chloroquine (Aralen),"medication_code, medication_term | treatment_code, treatment_term",rxnorm:2393,chloroquine,"medication, treatment",confirmed | Term mismatch | Need to verify
 hydroxychloroq,Hydroxycholorquine,"medication_code, medication_term | treatment_code, treatment_term",rxnorm:5521,hydroxychloroquine,"medication, treatment",confirmed | Term mismatch | Need to verify
-tocil,Tocilizumab (Actemra),"medication_code, medication_term | treatment_code, treatment_term",NCIT:C84217,Tocilizumab,"medication, treatment",confirmed | Code mismatch | Need to verify
+tocil,Tocilizumab (Actemra),"medication_code, medication_term | treatment_code, treatment_term",rxnorm:612865,tocilizumab,"medication, treatment",confirmed | Term mismatch | Need to verify
 kineret,Kineret (Anakinra),"medication_code, medication_term | treatment_code, treatment_term",rxnorm:352734,Kineret,"medication, treatment",confirmed | Match | Need to verify
 ivig,IVIG,"medication_code, medication_term | treatment_code, treatment_term",NCIT:C121331,Intravenous Immunoglobulin Therapy,"medication, treatment",added and confirmed | Match | Need to verify
 plasma,Plasma,"treatment_code, treatment_term",,,treatment,

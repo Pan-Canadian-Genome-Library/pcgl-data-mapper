@@ -94,6 +94,22 @@ ENTITY_PREFIX_OVERRIDES: Dict[str, str] = {
     "medication": "drug",
 }
 
+# Entities that generate one long-table record per qualifying source variable
+# WITHOUT requiring a target_code or target_term.  For these entities
+# Check 1 counts ALL source variables (no code/term filter).
+RECORD_PER_VARIABLE_ENTITIES: set = {"treatment"}
+
+# Entities that encode source variable in submitter_treatment_id via the
+# pattern {pid}_treatment_{source_variable}.  Checks 2, 3, and 4 derive the
+# source variable from this ID column rather than a {prefix}_source_text column.
+TREATMENT_ID_SOURCE_ENTITIES: set = {"treatment"}
+TREATMENT_ID_COLUMN = "submitter_treatment_id"
+
+# Entities that lack submitter_participant_id but can derive it from
+# submitter_treatment_id (format: {participant_id}_treatment_{source_variable}).
+# Only Check 3 is affected — Checks 2 and 4 use {prefix}_source_text as normal.
+TREATMENT_ID_PARTICIPANT_ENTITIES: set = {"medication", "procedure"}
+
 
 def get_entity_prefix(entity: str) -> str:
     """Return the column prefix for *entity* (e.g. 'medication' → 'drug')."""
@@ -297,12 +313,17 @@ class ETLValidator:
         counted; affiliated/ancillary columns (empty target_code AND target_term)
         do not generate independent long-table rows and are excluded.
         """
-        # Restrict to columns that will actually generate long-table rows
-        mapped = entity_config[
-            entity_config["target_code"].str.strip().ne("") |
-            entity_config["target_term"].str.strip().ne("")
-        ]
-        source_columns = mapped["source_variable"].unique().tolist()
+        # Restrict to columns that will actually generate long-table rows.
+        # For record-per-variable entities (e.g. treatment), every source
+        # variable generates a record regardless of target_code/target_term.
+        if entity.lower() in RECORD_PER_VARIABLE_ENTITIES:
+            source_columns = entity_config["source_variable"].unique().tolist()
+        else:
+            mapped = entity_config[
+                entity_config["target_code"].str.strip().ne("") |
+                entity_config["target_term"].str.strip().ne("")
+            ]
+            source_columns = mapped["source_variable"].unique().tolist()
 
         # Only include columns that actually exist in the wide table
         present_cols = [c for c in source_columns if c in wide_df.columns]
@@ -311,12 +332,16 @@ class ETLValidator:
         # Count qualifying wide-table cells: non-null, and not in skipped_values
         if present_cols:
             sub = wide_df[present_cols]
+            print(sub.dtypes)
             sv_set = self._build_skip_set()
+            print(sv_set)
             if sv_set is not None:
-                mask = sub.notna() & ~sub.astype(str).isin(sv_set)
+                mask = sub.notna() & ~sub.astype(str).isin(list(sv_set))
             else:
                 mask = sub.notna()
+   
             expected_rows = int(mask.sum().sum())
+            print(expected_rows)
         else:
             expected_rows = 0
 
@@ -361,6 +386,66 @@ class ETLValidator:
         """
         source_text_col = f"{prefix}_source_text"
 
+        # --- Treatment-ID-based entities: source variable is encoded in submitter_treatment_id ---
+        if entity.lower() in TREATMENT_ID_SOURCE_ENTITIES:
+            if TREATMENT_ID_COLUMN not in long_df.columns:
+                return {
+                    "source_text_column": TREATMENT_ID_COLUMN,
+                    "ERROR": f"Column '{TREATMENT_ID_COLUMN}' not found in long table.",
+                    "PASS": False,
+                }
+            observed_sources: set = set(
+                self._extract_source_var_from_treatment_id(
+                    long_df[TREATMENT_ID_COLUMN].dropna()
+                ).dropna().unique()
+            )
+            # For treatment (no code/term), all source variables are expected;
+            # for medication/procedure, only those with a code or term.
+            if entity.lower() in RECORD_PER_VARIABLE_ENTITIES:
+                expected_sources: set = set(entity_config["source_variable"].unique())
+            else:
+                _mapped = entity_config[
+                    entity_config["target_code"].str.strip().ne("") |
+                    entity_config["target_term"].str.strip().ne("")
+                ]
+                expected_sources = set(_mapped["source_variable"].unique())
+
+            not_produced_raw = sorted(expected_sources - observed_sources)
+            unexpected = sorted(observed_sources - expected_sources)
+
+            sv_set_c2 = self._build_skip_set()
+            true_gaps: List[str] = []
+            expected_empty: List[str] = []
+            for var in not_produced_raw:
+                if var in wide_df.columns:
+                    col = wide_df[var].dropna()
+                    if sv_set_c2 is not None:
+                        has_qualifying = bool(
+                            len(col) > 0 and (~col.astype(str).isin(sv_set_c2)).any()
+                        )
+                    else:
+                        has_qualifying = bool(
+                            len(col) > 0
+                            and ((col != 0) & (col != "") & (col != "0")).any()
+                        )
+                    if has_qualifying:
+                        true_gaps.append(var)
+                    else:
+                        expected_empty.append(var)
+                else:
+                    expected_empty.append(var)
+
+            return {
+                "source_text_column": TREATMENT_ID_COLUMN,
+                "expected_source_columns": len(expected_sources),
+                "observed_source_columns": len(observed_sources),
+                "true_gaps (has wide data but absent from long table)": true_gaps,
+                "expected_empty (no qualifying values in wide table)": expected_empty,
+                "unexpected (in long table but not in config)": unexpected,
+                "PASS": len(true_gaps) == 0,
+            }
+
+        # --- Standard entities ---
         if source_text_col not in long_df.columns:
             return {
                 "source_text_column": source_text_col,
@@ -368,13 +453,17 @@ class ETLValidator:
                 "PASS": False,
             }
 
-        # Only check source_labels that are expected to produce records
-        mapped_config = entity_config[
-            entity_config["target_code"].str.strip().ne("") |
-            entity_config["target_term"].str.strip().ne("")
-        ]
-        expected_sources: set = set(mapped_config["source_label"].unique())
-        observed_sources: set = set(long_df[source_text_col].dropna().unique())
+        # For record-per-variable entities every source label generates a record
+        # regardless of code/term; use the full config, not just coded rows.
+        if entity.lower() in RECORD_PER_VARIABLE_ENTITIES:
+            mapped_config = entity_config
+        else:
+            mapped_config = entity_config[
+                entity_config["target_code"].str.strip().ne("") |
+                entity_config["target_term"].str.strip().ne("")
+            ]
+        expected_sources = set(mapped_config["source_label"].unique())
+        observed_sources = set(long_df[source_text_col].dropna().unique())
 
         not_produced_raw = sorted(expected_sources - observed_sources)
         unexpected = sorted(observed_sources - expected_sources)
@@ -395,8 +484,8 @@ class ETLValidator:
         #                   answered "yes") → no records expected, not a gap
         sv_set_c2 = self._build_skip_set()
 
-        true_gaps: List[str] = []
-        expected_empty: List[str] = []
+        true_gaps = []
+        expected_empty = []
         for label in not_produced_raw:
             var = label_to_var.get(label, "")
             if var and var in wide_df.columns:
@@ -458,6 +547,122 @@ class ETLValidator:
 
         total_participants = wide_df[wide_pid_col].nunique()
 
+        # Ordered unique source variables from the config (preserves file input order)
+        config_var_order = {
+            v: i for i, v in enumerate(entity_config["source_variable"].unique())
+        }
+
+        # --- Treatment-ID-based entities: count unique submitter_treatment_ids per
+        #     source_variable (one treatment_id per participant per source_variable).
+        if entity.lower() in TREATMENT_ID_SOURCE_ENTITIES:
+            if TREATMENT_ID_COLUMN not in long_df.columns:
+                return {
+                    "code_column": TREATMENT_ID_COLUMN,
+                    "ERROR": f"Column '{TREATMENT_ID_COLUMN}' not found in long table.",
+                    "PASS": False,
+                }
+
+            working = long_df.copy()
+            working["_source_var"] = self._extract_source_var_from_treatment_id(
+                working[TREATMENT_ID_COLUMN]
+            )
+            # Extract participant_id: everything before the first "_" in treatment_id.
+            # Format is {participant_id}_treatment_{source_variable}, where
+            # participant_id itself contains no underscores.
+            working["_pid"] = working[TREATMENT_ID_COLUMN].str.split("_", n=1).str[0]
+
+            if entity.lower() in RECORD_PER_VARIABLE_ENTITIES:
+                # No code column — distribution is per source_variable only.
+                config_subset = (
+                    entity_config[["source_variable", "source_label"]]
+                    .drop_duplicates()
+                    .reset_index(drop=True)
+                )
+                actual_counts = (
+                    working.dropna(subset=["_source_var"])
+                    .groupby("_source_var")["_pid"]
+                    .nunique()
+                    .rename("unique_participants")
+                    .reset_index()
+                    .rename(columns={"_source_var": "source_variable"})
+                )
+                merged = config_subset.merge(actual_counts, on="source_variable", how="left")
+                merged["unique_participants"] = merged["unique_participants"].fillna(0).astype(int)
+                merged["target_code"] = ""
+                merged["target_term"] = ""
+                has_code_column = False
+                sort_cols = ["_var_order"]
+            else:
+                # Has code column (medication, procedure) — distribution per (source_var, code).
+                if code_col not in long_df.columns:
+                    return {
+                        "code_column": code_col,
+                        "ERROR": f"Column '{code_col}' not found in long table.",
+                        "PASS": False,
+                    }
+                config_subset = self._expand_pipe_codes(
+                    entity_config[
+                        entity_config["target_code"].str.strip().ne("") |
+                        entity_config["target_term"].str.strip().ne("")
+                    ][["source_variable", "source_label", "target_code", "target_term"]]
+                    .drop_duplicates()
+                    .reset_index(drop=True)
+                )
+                actual_counts = (
+                    working.dropna(subset=["_source_var", code_col])
+                    .groupby(["_source_var", code_col])["_pid"]
+                    .nunique()
+                    .rename("unique_participants")
+                    .reset_index()
+                    .rename(columns={"_source_var": "source_variable", code_col: "target_code"})
+                )
+                merged = config_subset.merge(
+                    actual_counts, on=["source_variable", "target_code"], how="left"
+                )
+                merged["unique_participants"] = merged["unique_participants"].fillna(0).astype(int)
+                has_code_column = True
+                sort_cols = ["_var_order", "target_code"]
+
+            merged["_var_order"] = (
+                merged["source_variable"].map(config_var_order).fillna(len(config_var_order))
+            )
+            merged = merged.sort_values(sort_cols).drop(columns=["_var_order"])
+            merged["pct_of_cohort"] = (
+                merged["unique_participants"] / total_participants * 100
+            ).round(2)
+
+            total_configured = len(merged)
+            rare_count = int(merged["unique_participants"].between(1, self.rare_threshold).sum())
+            total_observed_codes = int((merged["unique_participants"] > 0).sum())
+
+            all_records: List[Dict] = []
+            for _, row in merged.iterrows():
+                all_records.append({
+                    "source_variable": str(row["source_variable"] or ""),
+                    "source_label": str(row["source_label"] or ""),
+                    "target_code": str(row.get("target_code", "") or ""),
+                    "target_term": str(row.get("target_term", "") or ""),
+                    "unique_participants": int(row["unique_participants"]),
+                    "pct_of_cohort": float(row["pct_of_cohort"]),
+                })
+
+            return {
+                "code_column": code_col if has_code_column else TREATMENT_ID_COLUMN,
+                "has_code_column": has_code_column,
+                "total_cohort_participants (from wide table)": total_participants,
+                "total_configured_entries": total_configured,
+                "total_observed_entries": total_observed_codes,
+                "all_codes_by_prevalence": all_records,
+                f"rare_codes (1 <= unique_participants <= {self.rare_threshold})": rare_count,
+                "rare_pct_of_observed": (
+                    round(rare_count / total_observed_codes * 100, 2)
+                    if total_observed_codes
+                    else 0.0
+                ),
+                "PASS": True,  # Informational check; always passes
+            }
+
+        # --- Standard entities ---
         if code_col not in long_df.columns:
             return {
                 "code_column": code_col,
@@ -465,18 +670,33 @@ class ETLValidator:
                 "PASS": False,
             }
 
-        if long_pid_col not in long_df.columns:
-            return {
-                "code_column": code_col,
-                "ERROR": (
-                    f"Participant ID column '{long_pid_col}' not found in long table."
-                ),
-                "PASS": False,
-            }
+        # Entities that derive participant_id from submitter_treatment_id
+        # (medication, procedure have no submitter_participant_id column).
+        if entity.lower() in TREATMENT_ID_PARTICIPANT_ENTITIES:
+            if TREATMENT_ID_COLUMN not in long_df.columns:
+                return {
+                    "code_column": code_col,
+                    "ERROR": (
+                        f"Column '{TREATMENT_ID_COLUMN}' not found in long table "
+                        f"(needed to derive participant_id for '{entity}')."
+                    ),
+                    "PASS": False,
+                }
+            pid_col_effective = "_pid"
+        else:
+            if long_pid_col not in long_df.columns:
+                return {
+                    "code_column": code_col,
+                    "ERROR": (
+                        f"Participant ID column '{long_pid_col}' not found in long table."
+                    ),
+                    "PASS": False,
+                }
+            pid_col_effective = long_pid_col
 
         # All (source_variable, source_label, target_code, target_term) rows from
         # config that are expected to produce long-table records.
-        mapped_config = (
+        mapped_config = self._expand_pipe_codes(
             entity_config[
                 entity_config["target_code"].str.strip().ne("") |
                 entity_config["target_term"].str.strip().ne("")
@@ -484,11 +704,6 @@ class ETLValidator:
             .drop_duplicates()
             .reset_index(drop=True)
         )
-
-        # Ordered unique source variables from the config (preserves file input order)
-        config_var_order = {
-            v: i for i, v in enumerate(entity_config["source_variable"].unique())
-        }
 
         # Map source_label → source_variable for annotating long-table rows
         label_to_var = (
@@ -505,11 +720,15 @@ class ETLValidator:
         else:
             working["_source_var"] = ""
 
+        # For entities deriving participant_id from treatment_id, build the _pid column
+        if entity.lower() in TREATMENT_ID_PARTICIPANT_ENTITIES:
+            working["_pid"] = working[TREATMENT_ID_COLUMN].str.split("_", n=1).str[0]
+
         # Unique participant count per (source_variable, code) pair
         if not working.empty:
             actual_counts = (
                 working.dropna(subset=["_source_var"])
-                .groupby(["_source_var", code_col])[long_pid_col]
+                .groupby(["_source_var", code_col])[pid_col_effective]
                 .nunique()
                 .rename("unique_participants")
                 .reset_index()
@@ -547,7 +766,7 @@ class ETLValidator:
         # Observed codes = those with at least one participant
         total_observed_codes = int((merged["unique_participants"] > 0).sum())
 
-        all_records: List[Dict] = []
+        all_records = []
         for _, row in merged.iterrows():
             all_records.append({
                 "source_variable": str(row["source_variable"] or ""),
@@ -560,6 +779,7 @@ class ETLValidator:
 
         return {
             "code_column": code_col,
+            "has_code_column": True,
             "total_cohort_participants (from wide table)": total_participants,
             "total_configured_entries": total_configured,
             "total_observed_entries": total_observed_codes,
@@ -603,10 +823,80 @@ class ETLValidator:
         """
         source_text_col = f"{prefix}_source_text"
 
-        mapped = entity_config[
-            entity_config["target_code"].str.strip().ne("") |
-            entity_config["target_term"].str.strip().ne("")
-        ][["source_variable", "source_label"]].drop_duplicates()
+        # --- Treatment-ID-based entities: count rows per source_variable extracted
+        #     from submitter_treatment_id rather than {prefix}_source_text. ---
+        if entity.lower() in TREATMENT_ID_SOURCE_ENTITIES:
+            if TREATMENT_ID_COLUMN not in long_df.columns:
+                return {
+                    "source_text_column": TREATMENT_ID_COLUMN,
+                    "ERROR": f"Column '{TREATMENT_ID_COLUMN}' not found in long table.",
+                    "PASS": False,
+                }
+            extracted = self._extract_source_var_from_treatment_id(
+                long_df[TREATMENT_ID_COLUMN].dropna()
+            )
+            long_counts_tid = extracted.dropna().value_counts().to_dict()
+
+            if entity.lower() in RECORD_PER_VARIABLE_ENTITIES:
+                mapped_tid = entity_config[["source_variable", "source_label"]].drop_duplicates()
+            else:
+                mapped_tid = entity_config[
+                    entity_config["target_code"].str.strip().ne("") |
+                    entity_config["target_term"].str.strip().ne("")
+                ][["source_variable", "source_label"]].drop_duplicates()
+
+            sv_set = self._build_skip_set()
+            rows: List[Dict] = []
+            for config_order, (_, cfg_row) in enumerate(mapped_tid.iterrows()):
+                var = cfg_row["source_variable"]
+                label = cfg_row["source_label"]
+
+                if var in wide_df.columns:
+                    col = wide_df[var].dropna()
+                    if sv_set is not None:
+                        wide_count = int((~col.astype(str).isin(sv_set)).sum())
+                    else:
+                        wide_count = int(len(col))
+                else:
+                    wide_count = None
+
+                long_count = int(long_counts_tid.get(var, 0))
+                delta = (long_count - wide_count) if wide_count is not None else None
+
+                rows.append({
+                    "config_order": config_order,
+                    "source_variable": var,
+                    "source_label": label,
+                    "wide_count": wide_count,
+                    "long_count": long_count,
+                    "delta": delta,
+                    "missing_in_wide": wide_count is None,
+                })
+
+            mismatched = [r for r in rows if r["delta"] not in (0, None)]
+            missing_in_wide = [r for r in rows if r["missing_in_wide"]]
+            perfect = len(rows) - len(mismatched) - len(missing_in_wide)
+
+            return {
+                "source_text_column": TREATMENT_ID_COLUMN,
+                "skipped_values": self.skipped_values,
+                "total_variables_checked": len(rows),
+                "perfect_match": perfect,
+                "mismatched": mismatched,
+                "missing_in_wide": missing_in_wide,
+                "PASS": len(mismatched) == 0,
+            }
+
+        # --- Standard entities ---
+        # For record-per-variable entities every source variable generates a record
+        # regardless of code/term; check all variables, not just coded rows.
+        if entity.lower() in RECORD_PER_VARIABLE_ENTITIES:
+            mapped = entity_config[["source_variable", "source_label"]].drop_duplicates()
+        else:
+            mapped = entity_config[
+                entity_config["target_code"].str.strip().ne("") |
+                entity_config["target_term"].str.strip().ne("")
+            ][["source_variable", "source_label"]].drop_duplicates()
 
         has_source_text = source_text_col in long_df.columns
         long_counts: Dict[str, int] = {}
@@ -621,7 +911,7 @@ class ETLValidator:
         # Precompute normalised skip set (covers both int-string and float-string forms)
         sv_set = self._build_skip_set()
 
-        rows: List[Dict] = []
+        rows = []
         for config_order, (_, cfg_row) in enumerate(mapped.iterrows()):
             var = cfg_row["source_variable"]
             label = cfg_row["source_label"]
@@ -675,6 +965,45 @@ class ETLValidator:
     @staticmethod
     def _bool_badge(value: bool) -> str:
         return "✔ PASS" if value else "✖ FAIL"
+
+    @staticmethod
+    def _extract_source_var_from_treatment_id(series: pd.Series) -> pd.Series:
+        """
+        Extract the source_variable suffix from a submitter_treatment_id column.
+
+        The expected format is ``{participant_id}_treatment_{source_variable}``.
+        Splits on the first ``_treatment_`` token and returns everything after it.
+        """
+        return series.str.split("_treatment_", n=1).str[1]
+
+    @staticmethod
+    def _expand_pipe_codes(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Expand rows where target_code or target_term contains pipe-separated
+        values into multiple rows, one per code/term pair.
+
+        Both ``target_code`` and ``target_term`` are split on ``'|'`` and paired
+        positionally.  For example, a single config row with
+        ``target_code="HP:001|HP:002"`` and ``target_term="Fever|Cough"``
+        becomes two rows: ``(HP:001, Fever)`` and ``(HP:002, Cough)``.
+        If one column has more tokens than the other, the shorter side is
+        padded with empty strings.
+        """
+        rows = []
+        for _, row in df.iterrows():
+            codes = [c.strip() for c in str(row.get("target_code", "")).split("|")]
+            terms = [t.strip() for t in str(row.get("target_term", "")).split("|")]
+            max_len = max(len(codes), len(terms))
+            codes += [""] * (max_len - len(codes))
+            terms += [""] * (max_len - len(terms))
+            for code, term in zip(codes, terms):
+                new_row = row.copy()
+                new_row["target_code"] = code
+                new_row["target_term"] = term
+                rows.append(new_row)
+        if rows:
+            return pd.DataFrame(rows).reset_index(drop=True)
+        return df.copy()
 
     def _build_skip_set(self) -> Optional[set]:
         """
@@ -738,6 +1067,11 @@ class ETLValidator:
             lines.append(f"  ✖ ERROR: {result['ERROR']}")
             return lines
 
+        if "NOTE" in result:
+            lines.append(f"  ℹ {result['NOTE']}")
+            lines.append(f"  Result  →  {self._bool_badge(result['PASS'])}  (not applicable)")
+            return lines
+
         lines += [
             f"  Expected source cols (mapped only) : {result['expected_source_columns']}",
             f"  Observed source cols               : {result['observed_source_columns']}",
@@ -777,8 +1111,14 @@ class ETLValidator:
             lines.append(f"  ✖ ERROR: {result['ERROR']}")
             return lines
 
+        if "NOTE" in result:
+            lines.append(f"  ℹ {result['NOTE']}")
+            lines.append(f"  Result  →  {self._bool_badge(result['PASS'])}  (not applicable)")
+            return lines
+
         total = result["total_cohort_participants (from wide table)"]
         rare_key = [k for k in result if k.startswith("rare_codes")][0]
+        has_code_column = result.get("has_code_column", True)
 
         lines += [
             f"  Total cohort participants     : {total:,}",
@@ -787,18 +1127,35 @@ class ETLValidator:
             f"  {rare_key}  : {result[rare_key]} "
             f"({result['rare_pct_of_observed']}% of observed entries)",
             "",
-            f"  {'SOURCE_VARIABLE':<25} {'SOURCE_LABEL':<30} {'CODE':<18} {'TERM':<30} {'PARTICIPANTS':>12}  {'%COHORT':>8}",
-            f"  {'-'*25} {'-'*30} {'-'*18} {'-'*30} {'-'*12}  {'-'*8}",
         ]
-        for rec in result["all_codes_by_prevalence"]:
-            var_str = str(rec["source_variable"])[:24]
-            lbl_str = str(rec["source_label"])[:29]
-            code_str = str(rec["target_code"])[:17]
-            term_str = str(rec["target_term"])[:29] if rec["target_term"] else ""
-            lines.append(
-                f"  {var_str:<25} {lbl_str:<30} {code_str:<18} {term_str:<30} "
-                f"{rec['unique_participants']:>12,}  {rec['pct_of_cohort']:>7.2f}%"
-            )
+
+        if has_code_column:
+            lines += [
+                f"  {'SOURCE_VARIABLE':<25} {'SOURCE_LABEL':<30} {'CODE':<18} {'TERM':<30} {'PARTICIPANTS':>12}  {'%COHORT':>8}",
+                f"  {'-'*25} {'-'*30} {'-'*18} {'-'*30} {'-'*12}  {'-'*8}",
+            ]
+            for rec in result["all_codes_by_prevalence"]:
+                var_str = str(rec["source_variable"])[:24]
+                lbl_str = str(rec["source_label"])[:29]
+                code_str = str(rec["target_code"])[:17]
+                term_str = str(rec["target_term"])[:29] if rec["target_term"] else ""
+                lines.append(
+                    f"  {var_str:<25} {lbl_str:<30} {code_str:<18} {term_str:<30} "
+                    f"{rec['unique_participants']:>12,}  {rec['pct_of_cohort']:>7.2f}%"
+                )
+        else:
+            lines += [
+                f"  {'SOURCE_VARIABLE':<35} {'SOURCE_LABEL':<40} {'PARTICIPANTS':>12}  {'%COHORT':>8}",
+                f"  {'-'*35} {'-'*40} {'-'*12}  {'-'*8}",
+            ]
+            for rec in result["all_codes_by_prevalence"]:
+                var_str = str(rec["source_variable"])[:34]
+                lbl_str = str(rec["source_label"])[:39]
+                lines.append(
+                    f"  {var_str:<35} {lbl_str:<40} "
+                    f"{rec['unique_participants']:>12,}  {rec['pct_of_cohort']:>7.2f}%"
+                )
+
         lines.append(f"  Result  →  {self._bool_badge(result['PASS'])}  (informational)")
         return lines
 
@@ -810,6 +1167,14 @@ class ETLValidator:
         lines = [
             "  ── Check 4: Per-Variable Gap Analysis ──────────────────────────",
             f"  Source-text column       : {result.get('source_text_column', 'N/A')}",
+        ]
+
+        if "NOTE" in result:
+            lines.append(f"  ℹ {result['NOTE']}")
+            lines.append(f"  Result  →  {self._bool_badge(result['PASS'])}  (not applicable)")
+            return lines
+
+        lines += [
             f"  Wide count basis         : {wide_basis}",
             f"  Variables checked        : {result['total_variables_checked']}",
             f"  Perfect match (delta=0)  : {result['perfect_match']}",
