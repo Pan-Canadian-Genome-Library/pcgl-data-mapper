@@ -82,7 +82,8 @@ configs:
         
   # =====================================================================
   # Respiratory Support Procedures
-  # =================================== ==================================
+  # =================================== =================================
+
   - source_field: prone_vent
     code: "snomedct:870391004"
     term: "Assisted ventilation in prone position"
@@ -143,8 +144,8 @@ configs:
   # Cardiovascular Support
   # =====================================================================
   - source_field: inotrop_vasopress
-    code: "NCIT:C191468"
-    term: "Implantation of Temporary Mechanical Circulatory Support Device"
+    code: "snomedct:1296972008"
+    term: "Inotropic therapy"
     source_label: "Inotropes/vasopressors"
     enrichments:
       - target_field: procedure_body_site_code
@@ -152,7 +153,15 @@ configs:
       - target_field: procedure_body_site_term
         default_value: "blood vessel"
 
-            
+  - source_field: inotrop_vasopress
+    code: "snomedct:870386000"
+    term: "Vasopressor therapy"
+    source_label: "Inotropes/vasopressors"
+    enrichments:
+      - target_field: procedure_body_site_code
+        default_value: "UBERON:0001981"
+      - target_field: procedure_body_site_term
+        default_value: "blood vessel"
 
 
 

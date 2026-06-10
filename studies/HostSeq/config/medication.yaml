@@ -117,13 +117,13 @@ configs:
     source_label: "Antiviral agent"
   
   - source_field: antiviral_ribavirin
-    code: "NCIT:C807"
-    term: "Ribavirin"
+    code: "rxnorm:9344"
+    term: "ribavirin"
     source_label: "Ribavirin"
   
   - source_field: antiviral_lopin_riton
-    code: "NCIT:C2096"
-    term: "Lopinavir/Ritonavir"
+    code: "rxnorm:284640"
+    term: "lopinavir/ritonavir"
     source_label: "Lopinavir/Ritonavir"
   
   - source_field: antiviral_interf_a
@@ -132,8 +132,8 @@ configs:
     source_label: "Interferon alpha"
   
   - source_field: antiviral_interf_b
-    code: "NCIT:C20495"
-    term: "Interferon Beta"
+    code: "rxnorm:4381"
+    term: "interferon-beta"
     source_label: "Interferon beta"
   
   - source_field: antiviral_neur_inhibitor
@@ -223,8 +223,8 @@ configs:
   # Biologics and Immunomodulators
   # =====================================================================
   - source_field: tocil
-    code: "NCIT:C84217"
-    term: "Tocilizumab"
+    code: "rxnorm:612865"
+    term: "tocilizumab"
     source_label: "Tocilizumab (Actemra)"
   
   - source_field: kineret
