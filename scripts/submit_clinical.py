@@ -83,9 +83,9 @@ def api_request(
     return response
 
 
-def parse_validation_errors(response_data: dict) -> List[str]:
+def parse_errors_detail(response_data: dict) -> List[str]:
     """
-    Parse validation errors from API response.
+    Parse errors details from API response.
     
     Args:
         response_data: JSON response data
@@ -94,18 +94,17 @@ def parse_validation_errors(response_data: dict) -> List[str]:
         List of formatted error messages
     """
     errors = []
-    inserts = response_data.get('errors', {}).get('inserts', {})
+    insert_errors = response_data.get('errors', [])
     
-    for entity, entity_errors in inserts.items():
-        for error in entity_errors:
-            field_name = error.get('fieldName', 'N/A')
-            reason = error.get('reason', 'Unknown')
-            field_value = error.get('fieldValue', '')
-            
-            error_parts = [f"Entity: {entity}", f"Reason: {reason}", f"Field: {field_name}"]
-            if field_value:
-                error_parts.append(f"Value: {field_value}")
-            errors.append("  " + ", ".join(error_parts))
+    for error in insert_errors:
+        field_name = error.get('fieldName', 'N/A')
+        reason = error.get('reason', 'Unknown')
+        field_value = error.get('fieldValue', '')
+        
+        error_parts = [f"Reason: {reason}", f"Field: {field_name}"]
+        if field_value:
+            error_parts.append(f"Value: {field_value}")
+        errors.append("  " + ", ".join(error_parts))
     
     return errors
 
@@ -269,7 +268,7 @@ def check_submission_status(
     Commit stage:     polls until COMMITTED (waits on VALID while server commits).
     Raises on INVALID in either stage.
 
-    Status enum: OPEN, VALID, INVALID, CLOSED, COMMITTED
+    Status enum: OPEN, VALIDATING, VALID, INVALID, CLOSED, COMMITTING, COMMITTED
 
     Args:
         clinical_url: Base URL for clinical API
@@ -283,7 +282,7 @@ def check_submission_status(
         True when the expected terminal status is reached
 
     Raises:
-        ValueError: If status is INVALID, an unexpected state, or max_wait exceeded
+        ValueError: If status is INVALID or CLOSED, an unexpected state, or max_wait exceeded
     """
     stage_msg = "Validating" if stage == 'validation' else "Verifying committed"
     print(f"{stage_msg} submission: {submission_id}")
@@ -293,8 +292,9 @@ def check_submission_status(
         response = api_request('GET', f"{clinical_url}/submission/{submission_id}", token)
         status = response.json()['status']
 
-        if status == 'INVALID':
-            errors = parse_validation_errors(response.json())
+        if status in ['INVALID', 'CLOSED']:
+            response_details = api_request('GET', f"{clinical_url}/submission/{submission_id}/details", token)
+            errors = parse_errors_detail(response_details.json())
             stage_error = "Validation" if stage == 'validation' else "Commit"
             raise ValueError(f"{stage_error} failed with errors:\n" + "\n".join(errors))
 
@@ -302,7 +302,7 @@ def check_submission_status(
             if status == 'VALID':
                 print("Validation successful")
                 return True
-            if status == 'OPEN':
+            if status in ['OPEN', 'VALIDATING']:
                 print(f"Status: {status} — waiting... ({elapsed}s elapsed)")
             else:
                 raise ValueError(
@@ -314,8 +314,8 @@ def check_submission_status(
             if status == 'COMMITTED':
                 print("Data successfully committed to database")
                 return True
-            if status == 'VALID':
-                # Server is processing the commit, submission stays VALID until done
+            if status in ['VALID', 'COMMITTING']:
+                # Server is processing the commit
                 print(f"Status: {status} — commit in progress... ({elapsed}s elapsed)")
             else:
                 raise ValueError(
