@@ -284,18 +284,18 @@ configs:
         default_value: "UO:0000179"
   
   - source_field: lab_total_bilirubin
-    code: "LOINC:1975-2"
-    term: "Bilirubin.total [Mass/volume] in Serum or Plasma"
+    code: "LOINC:14631-6"
+    term: "Bilirubin.total [Moles/volume] in Serum or Plasma"
     source_label: "Total bilirubin"
     enrichments:
       - target_field: measurement_result_numeric
         source_field: lab_total_bilirubin_result
         target_type: float
-      - target_field: [measurement_unit, measurement_unit_source_text]
+      - target_field: [measurement_code, measurement_term, measurement_unit, measurement_unit_source_text]
         source_field: lab_total_bilirubin_unit
         value_mappings:
-          'mg_dL': ["UO:0010067", "mg/dL"]
-          'umol_L': ["UO:0010003", "umol/L"]
+          'mg_dl': ["LOINC:1975-2", "Bilirubin.total [Mass/volume] in Serum or Plasma", "UO:0010067", "mg/dL"]
+          'umol_l': ["LOINC:14631-6", "Bilirubin.total [Moles/volume] in Serum or Plasma", "UO:0010003", "umol/L"]
   
   # =====================================================================
   # Renal Function Tests
@@ -308,25 +308,25 @@ configs:
       - target_field: measurement_result_numeric
         source_field: lab_creatinine_result
         target_type: float
-      - target_field: [measurement_unit, measurement_unit_source_text]
+      - target_field: [measurement_code, measurement_term, measurement_unit, measurement_unit_source_text]
         source_field: lab_creatinine_unit
         value_mappings:
-          'mg_dl': ["UO:0010067", "mg/dL"]
-          'umol_l': ["UO:0010003", "umol/L"]
+          'mg_dl': ["LOINC:2160-0", "Creatinine [Mass/volume] in Serum or Plasma", "UO:0010067", "mg/dL"]
+          'umol_l': ["LOINC:14682-9", "Creatinine [Moles/volume] in Serum or Plasma", "UO:0010003", "umol/L"]
   
   - source_field: lab_bun
-    code: "LOINC:3094-0"
-    term: "Urea nitrogen [Mass/volume] in Serum or Plasma"
+    code: "LOINC:14937-7"
+    term: "Urea nitrogen [Moles/volume] in Serum or Plasma"
     source_label: "Blood urea nitrogen (urea)"
     enrichments:
       - target_field: measurement_result_numeric
         source_field: lab_bun_result
         target_type: float
-      - target_field: [measurement_unit, measurement_unit_source_text]
+      - target_field: [measurement_code, measurement_term, measurement_unit, measurement_unit_source_text]
         source_field: lab_bun_unit
         value_mappings:
-          'mg_dl': ["UO:0010067", "mg/dL"]
-          'mmol_l': [null, "mmol/L"]
+          'mg_dl': ["LOINC:3094-0", "Urea nitrogen [Mass/volume] in Serum or Plasma", "UO:0010067", "mg/dL"]
+          'mmol_l': ["LOINC:14937-7", "Urea nitrogen [Moles/volume] in Serum or Plasma", null, "mmol/L"]
   
   # =====================================================================
   # Electrolytes
@@ -361,18 +361,18 @@ configs:
   # Metabolic Tests
   # =====================================================================
   - source_field: lab_glucose
-    code: "LOINC:2345-7"
-    term: "Glucose [Mass/volume] in Serum or Plasma"
+    code: "LOINC:14749-6"
+    term: "Glucose [Moles/volume] in Serum or Plasma"
     source_label: "Glucose"
     enrichments:
       - target_field: measurement_result_numeric
         source_field: lab_glucose_result
         target_type: float
-      - target_field: [measurement_unit, measurement_unit_source_text]
+      - target_field: [measurement_code, measurement_term, measurement_unit, measurement_unit_source_text]
         source_field: lab_glucose_unit
         value_mappings:
-          'mg_dl': ["UO:0010067", "mg/dL"]
-          'mmol_l': [null, "mmol/L"]
+          'mg_dl': ["LOINC:2345-7", "Glucose [Mass/volume] in Serum or Plasma", "UO:0010067", "mg/dL"]
+          'mmol_l': ["LOINC:14749-6", "Glucose [Moles/volume] in Serum or Plasma", null, "mmol/L"]
   
   - source_field: lab_lactate
     code: "LOINC:2524-7"
@@ -382,11 +382,11 @@ configs:
       - target_field: measurement_result_numeric
         source_field: lab_lactate_result
         target_type: float
-      - target_field: [measurement_unit, measurement_unit_source_text]
+      - target_field: [measurement_code, measurement_term, measurement_unit, measurement_unit_source_text]
         source_field: lab_lactate_unit
         value_mappings:
-          'mmol_l': [null, "mmol/L"]
-          'mg_dl': ["UO:0010067", "mg/dL"]
+          'mmol_l': ["LOINC:2524-7", "Lactate [Moles/volume] in Serum or Plasma", null, "mmol/L"]
+          'mg_dl': ["LOINC:14118-4", "Lactate [Mass/volume] in Serum or Plasma", "UO:0010067", "mg/dL"]
   
   # =====================================================================
   # Inflammatory Markers
@@ -748,20 +748,20 @@ configs:
   # Cardiac Markers
   # =====================================================================
   - source_field: lab_troponin
-    code: "LOINC:110288-8"
-    term: "Troponin T.cardiac [Measurement] in Serum or Plasma"
+    code: null
+    term: null
     source_label: "Troponin"
     enrichments:
       - target_field: measurement_result_numeric
         source_field: lab_troponin_result
         target_type: float
-      - target_field: [measurement_unit, measurement_unit_source_text]
+      - target_field: [measurement_code, measurement_term, measurement_unit, measurement_unit_source_text]
         source_field: lab_troponin_unit
         value_mappings:
-          'hsTnT': [null, "hsTnT"]
-          'hsTnI': [null, "hsTnI"]
-          'TnT': [null, "TnT"]
-          'TnI': [null, "TnI"]
+          'hsTnT': ["LOINC:67151-1", "Troponin T.cardiac [Mass/volume] in Serum or Plasma by High sensitivity method", null, "hsTnT"]
+          'hsTnI': ["LOINC:89579-7", "Troponin I.cardiac [Mass/volume] in Serum or Plasma by High sensitivity method", null, "hsTnI"]
+          'TnT': ["LOINC:6598-7", "Troponin T.cardiac [Mass/volume] in Serum or Plasma", null, "TnT"]
+          'TnI': ["LOINC:10839-9", "Troponin I.cardiac [Mass/volume] in Serum or Plasma", null, "TnI"]
 
   
 

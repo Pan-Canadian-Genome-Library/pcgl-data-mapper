@@ -154,7 +154,7 @@ configs:
           com_transplant_type___7: ["icd10:Z94.7", "Corneal transplant status", "Organ type of transplant (choice=Eye (Cornea))"]
           com_transplant_type___8: ["icd10:Z94.81", "Bone marrow transplant status", "Organ type of transplant (choice=Blood/bone marrow)"]
           com_transplant_type___9: ["icd10:Z95.828", "Presence of other vascular implants and grafts", "Organ type of transplant (choice=Blood vessel)"]
-          com_transplant_type___10: ["icd10:Z94.9", "Transplanted organ and tissue status, unspecified", "Organ type of transplant (choice=Other)"]
+          com_transplant_type___10: ["icd10:Z94.89", "Other transplanted organ and tissue status", "Organ type of transplant (choice=Other)"]
       - target_field: comorbidity_note
         target_type: note
         source_field: com_transplant_type_other

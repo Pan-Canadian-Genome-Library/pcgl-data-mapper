@@ -159,8 +159,8 @@ configs:
     source_label: "Azithromycin (Zithromax)"
   
   - source_field: antibiotic_other
-    code: "NCIT:C15620"
-    term: "Antibiotic Therapy"
+    code: "NCIT:C258"
+    term: "Antibiotic"
     source_label: "Any other antibiotic"
     enrichments:
       - target_field: drug_note
@@ -228,8 +228,8 @@ configs:
     source_label: "Tocilizumab (Actemra)"
   
   - source_field: kineret
-    code: "rxnorm:352734"
-    term: "Kineret"
+    code: "rxnorm:72435"
+    term: "anakinra"
     source_label: "Kineret (Anakinra)"
   
   - source_field: ivig
