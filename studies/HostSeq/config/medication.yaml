@@ -175,9 +175,7 @@ configs:
     term: "Corticosteroid"
     source_label: "Corticosteroid"
     enrichments:
-      - target_field: prescribed_cumulative_drug_dose
-        source_field: cort_dose
-      - target_field: actual_cumulative_drug_dose
+      - target_field: drug_note
         source_field: cort_dose
       - target_field: [drug_code, drug_term, drug_source_text]
         source_type: checkbox
