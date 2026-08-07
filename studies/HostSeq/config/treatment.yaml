@@ -311,12 +311,6 @@ configs:
         target_type: note
         source_field: antiviral_other_name
 
-  - source_field: antiviral_neur_inhibitor
-    enrichments:
-      - target_field: treatment_type
-        default_value: "Medication"
-
-
   # =====================================================================
   # Medications - Antibiotics
   # =====================================================================
@@ -407,12 +401,6 @@ configs:
   # Medications - Biologics and Immunomodulators
   # =====================================================================
   - source_field: tocil
-    enrichments:
-      - target_field: treatment_type
-        default_value: "Medication"
-  
-
-  - source_field: kineret
     enrichments:
       - target_field: treatment_type
         default_value: "Medication"
