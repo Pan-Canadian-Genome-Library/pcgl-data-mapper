@@ -362,7 +362,7 @@ configs:
           1: "Mild"
           2: "Moderate"
           3: "Severe"
-          4: "Missing - Unknown"
+          4: null
   
   - source_field: pneumothorax
     code: "HP:0002107"
