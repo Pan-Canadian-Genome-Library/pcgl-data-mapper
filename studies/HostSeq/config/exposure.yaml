@@ -200,7 +200,7 @@ configs:
           2: ["Current", "AstraZeneca"]
           3: ["Current", "Johnson & Johnson"]
           4: ["Current", "Other"]
-          -1: ["Missing - Unknown", "Don't know"]
+          5: ["Missing - Unknown", "Don't know"]
       - target_field: age_at_exposure
         target_type: age
         params:
@@ -229,7 +229,7 @@ configs:
           2: ["Current", "AstraZeneca"]
           3: ["Current", "Johnson & Johnson"]
           4: ["Current", "Other"]
-          -1: ["Missing - Unknown", "Don't know"]
+          5: ["Missing - Unknown", "Don't know"]
       - target_field: age_at_exposure
         target_type: age
         params:
@@ -258,7 +258,7 @@ configs:
           2: ["Current", "AstraZeneca"]
           3: ["Current", "Johnson & Johnson"]
           4: ["Current", "Other"]
-          -1: ["Missing - Unknown", "Don't know"]
+          5: ["Missing - Unknown", "Don't know"]
       - target_field: age_at_exposure
         target_type: age
         params:
@@ -287,7 +287,7 @@ configs:
           2: ["Current", "AstraZeneca"]
           3: ["Current", "Johnson & Johnson"]
           4: ["Current", "Other"]
-          -1: ["Missing - Unknown", "Don't know"]
+          5: ["Missing - Unknown", "Don't know"]
       - target_field: age_at_exposure
         target_type: age
         params:
