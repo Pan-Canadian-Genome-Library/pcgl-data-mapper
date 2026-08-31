@@ -1,0 +1,69 @@
+# Analysis Entity Configuration Template
+#
+# PCGL Base Schema: Analysis
+# All base fields are pre-defined below - customize source_field and source_label for your study
+
+entity:
+  name: Analysis
+  source_files:
+    primary: "analysis.csv"        # Main data source
+    secondary:
+    # if any additional sources
+
+  fields:
+    base:
+      - studyId
+      - submitter_analysis_id
+      - analysisType
+      - submitter_experiment_id
+      - data_category
+      - variant_class
+      - variant_calling_strategy
+      - genome_build
+
+  pattern: direct
+
+mappings:
+
+  - source_field: program_id
+    target_field: studyId
+    source_label: null
+
+  - source_field: analysis_id
+    target_field: submitter_analysis_id
+    source_label: null
+
+  - source_field: analysis_type
+    target_field: analysisType
+    source_label: null
+    value_mappings:
+      "reference_alignment": "sequenceAlignment"
+      "sequence_variation": "variantCall"
+#      "sequence_annotation": "sequenceExperiment"
+
+  - source_field: experiment_id
+    target_field: submitter_experiment_id
+    source_label: null
+
+  - source_field: library_source
+    target_field: data_category
+    source_label: null
+    value_mappings:
+      "genomic": "Genomics"
+      "transcriptomic": "Transcriptomics"
+
+  - source_field: null
+    target_field: genome_build
+    source_label: null
+    default_value: "GRCh38"
+
+## Not currently used if we are only submitting alignment files
+#  - source_field: null
+#    target_field: variant_class
+#    source_label: null
+#    default_value: "Somatic"
+#
+#  - source_field: null
+#    target_field: submitter_experiment_id
+#    source_label: null
+#    default_value: "Tumour normal"

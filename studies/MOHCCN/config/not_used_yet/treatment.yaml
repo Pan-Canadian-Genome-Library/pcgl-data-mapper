@@ -1,0 +1,104 @@
+# Treatment Entity Configuration Template
+#
+# PCGL Base Schema: Treatment
+# All base fields are pre-defined below - customize source_field and source_label for your study
+
+entity:
+  name: Treatment
+  
+  fields:
+    base:
+      - submitter_participant_id
+      - submitter_treatment_id
+      - treatment_type
+      - submitter_diagnosis_id
+      - age_at_treatment
+      - treatment_duration
+      - treatment_intent
+      - treatment_response
+      - treatment_status
+    # optionally include extension fields
+    #extension:
+      # Template: Add any extension fields needed for your study
+      # - treatment_note
+      # ADD MORE EXTENSION FIELDS HERE 
+      
+  pattern: expansion
+  
+  # Optional: Use custom pattern for advanced transformations
+  # pattern: custom
+  # function: your_custom_expansion_function
+  
+  # Parameters for expansion pattern 
+  params:
+    participant_id_field: participant_id  # CUSTOMIZE: Your participant ID field
+    skip_values: [0, null]  # Skip unchecked checkboxes and null values
+
+# Optional preprocessing steps before mapping
+preprocessing:
+  # Template: 
+  # - type: clean_numeric/strip_whitespace/...
+  #   fields: []  # CUSTOMIZE
+  # ADD MORE PREPROCESSING STEPS HERE
+
+# Optional filters to apply before mapping
+filters: 
+  # Template:
+  # participant_id_field: participant_id  # CUSTOMIZE
+  # eligible_participants: true
+  # include_rows:
+  #   baseline: true
+  #   repeat_instruments: []
+  # field_filters:
+  #   - field: source_field_name
+  #     operator: equals/not_equals/greater_than/...
+  #     value: some_value
+  # ADD MORE FILTERS HERE
+
+# These create the default mapping logic for each field in a mapped record
+mappings:
+  # CUSTOMIZE: Add entries for each field in the mapped record 
+  # Template:
+  # - target_field: your_target_field
+  #   target_type: value/age/identifier/...
+  #   source_field: null  # CUSTOMIZE
+  #   source_label: null  # CUSTOMIZE
+  #   params: {}  # CUSTOMIZE if needed
+  #   value_mappings: {}  # CUSTOMIZE if needed
+  #   default_value: null  # CUSTOMIZE if needed
+  # ADD MORE FIELD MAPPING HERE
+
+# These create the record specific mapping logic
+configs:
+  # CUSTOMIZE: Add entries for each checkbox in your data  
+  # Template:
+  # - source_field: your_checkbox_field
+  #   code: "XXX:XXXXXXX"
+  #   term: "Label from the ontology"
+  #   source_label: "Label from source"
+      # Optional: Add enrichments to populate additional fields
+      # enrichments:
+        # - target_field: additional_field_name
+        #   source_type: radio
+        #   source_field: source_field_name
+        #   value_mappings:
+        #     1: "Type 1 ..."
+        #     2: "Type 2 ..."
+        # ADD MORE ENRICHMENTS AS NEEDED
+  # ADD MORE CHECKBOXES HERE   
+
+# Optional Validations
+validations:
+  # CUSTOMIZE: Add validation rules as needed
+  # Template:
+  # - type: your_validation_type
+  #   field: your_field_name
+  # ADD MORE VALIDATIONS HERE
+
+# Optional Post-processing
+post_processing:
+  # CUSTOMIZE: Add post-processing steps as needed
+  # Template:
+  # - type: your_post_processing_type
+  #   columns: []  # CUSTOMIZE
+  # ADD MORE POST-PROCESSING STEPS HERE
