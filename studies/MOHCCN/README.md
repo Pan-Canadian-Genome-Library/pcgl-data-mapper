@@ -27,3 +27,17 @@ Current config files for the mapping are:
 - Yet to map files-at time of writing it was not possible to have an analysis with multiple linked samples/experiments
 - Assumes DACs and Studies will be created manually before these other objects are submitted
 - Objects can only be submitted one study at a time
+
+### Usage:
+
+1. Clone the current repo and set up env according to main README instructions
+2. Copy [synthetic data csvs](https://github.com/CanDIG/mohccn-synthetic-data/tree/develop/extra_small_dataset_csv/raw_data) to `data/source/mohccn_synth_data`
+3. Copy [genomic json](https://github.com/CanDIG/mohccn-synthetic-data/blob/develop/extra_small_dataset_csv/genomic.json) to `data/source/mohccn_synth_data`
+4. Run the genomic json csv converter with
+```commandline
+python studies/MOHCCN/transform_genomic_to_csvs.py -i data/source/mohccn_synth_data/genomic.json -o data/source/mohccn_synth_data
+```
+3. Run the mapper with:
+```commandline
+uv run python prototype_mapper.py --study_id MOHCCN --input_dir data/source/mohccn_synth_data/ --output_dir data/mapped/mohccn_synth_data/
+```
