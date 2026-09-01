@@ -1,0 +1,114 @@
+# Example Study - Specimen Entity Mapping Configuration
+#
+# Target Entity: Specimen (PCGL Base Schema)
+# Source: Example CSV export
+# Pattern: Direct mapping
+
+entity:
+  name: Specimen
+  source_files:
+    primary: "Specimen.csv"
+    secondary:
+      - file: "SampleRegistration.csv"
+        join_on: submitter_specimen_id
+        columns: [specimen_tissue_source]
+  fields:
+    base:
+      - submitter_participant_id
+      - submitter_specimen_id
+      - specimen_tissue_source_code
+  pattern: direct
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Participant Identifier
+  # Source: participant_id
+  # ---------------------------------------------------------------------------
+  - source_field: submitter_donor_id
+    target_field: submitter_participant_id
+  
+  # ---------------------------------------------------------------------------
+  # Specimen Identifier
+  # Format: {participant_id}_specimen_{sample_id}
+  # ---------------------------------------------------------------------------
+  - source_field: submitter_specimen_id
+    target_field: submitter_specimen_id
+    source_label: null
+  
+  # ---------------------------------------------------------------------------
+  # Tissue Source Term
+  # Source: specimen_type (free text)
+  # ---------------------------------------------------------------------------
+  - source_field: specimen_tissue_source
+    target_field: specimen_tissue_source_code
+    default_value: "NCIT:C17998"
+    value_mappings:
+      "Abdominal fluid": "NCIT:C77611"
+      "Amniotic fluid": "NCIT:C13188"
+      "Arterial blood": "NCIT:C78729"
+      "Bile": "NCIT:C13192"
+      "Blood derived - bone marrow": "NCIT:C12431"
+      "Blood derived - peripheral blood": "NCIT:C173496"
+      "Bone marrow fluid": "NCIT:C12431"
+      "Bone marrow derived mononuclear cells": "NCIT:C164011"
+      "Buccal cell": "NCIT:C172264"
+      "Buffy coat": "NCIT:C84507"
+      "Cerebrospinal fluid": "NCIT:C12692"
+      "Cervical mucus": "NCIT:C32297"
+      "Convalescent plasma": "NCIT:C173750"
+      "Cord blood": "NCIT:C13300"
+      "Duodenal fluid": "NCIT:C192902"
+      "Female genital fluid": "NCIT:C32589"
+      "Fetal blood": "NCIT:C192903"
+      "Hydrocele fluid": "NCIT:C192905"
+      "Male genital fluid": "NCIT:C13713"
+      "Other": "NCIT:C17649"
+      "Pancreatic fluid": "NCIT:C33256"
+      "Pericardial effusion": "NCIT:C3319"
+      "Pleural fluid": "NCIT:C77613"
+      "Renal cyst fluid": "NCIT:C3970"
+      "Saliva": "NCIT:C13275"
+      "Seminal fluid": "NCIT:C33529"
+      "Serum": "NCIT:C13325"
+      "Solid tissue": "NCIT:C164014"
+      "Sputum": "NCIT:C13278"
+      "Synovial fluid": "NCIT:C33718"
+      "Urine": "NCIT:C13283"
+      "Venous blood": "NCIT:C78730"
+      "Vitreous fluid": "NCIT:C13323"
+      "Whole blood": "NCIT:C41067"
+      "Wound": "NCIT:C121616"
+
+#  - source_field: specimen_type
+#    target_field: specimen_tissue_source_term
+#    source_label: "Specimen type"
+  
+  # ---------------------------------------------------------------------------
+  # Specimen Source Text
+  # Source: specimen_type (free text)
+  # ---------------------------------------------------------------------------
+#  - source_field: specimen_type
+#    target_field: specimen_source_text
+#    source_label: "Specimen type"
+  
+  # ---------------------------------------------------------------------------
+  # Age at Collection
+  # Calculated from dob and collection_date
+  # ---------------------------------------------------------------------------
+#  - source_field: collection_date
+#    target_field: age_at_specimen_collection
+#    source_label: "Collection date"
+#    target_type: age
+#    params:
+#      birth_date_field: dob
+#      event_date_field: collection_date
+
+  
+  # ---------------------------------------------------------------------------
+  # Collection Date
+  # Source: collection_date
+  # ---------------------------------------------------------------------------
+#  - source_field: collection_date
+#    target_field: collection_date
+#    source_label: "Collection date"
+#    target_type: date

@@ -1,0 +1,53 @@
+# Experiment Entity Configuration Template
+#
+# PCGL Base Schema: Experiment
+# All base fields are pre-defined below - customize source_field and source_label for your study
+
+entity:
+  name: Experiment
+  source_files:
+    primary: "experiment.csv"        # Main data source
+
+  fields:
+    base:
+      - submitter_experiment_id
+      - submitter_sample_id
+      - experiment_type
+      - assay_type_code
+      - platform
+      - instrument
+
+  pattern: direct
+
+mappings:
+  - source_field: experiment_id
+    target_field: submitter_experiment_id
+    source_label: null
+
+  - source_field: submitter_sample_id
+    target_field: submitter_sample_id
+    source_label: null
+
+  - source_field: library_source
+    target_field: experiment_type
+    value_mappings:
+      "genomic": "NCIT:C84343"
+      "transcriptomic": "NCIT:C153189"
+
+  - source_field: library_strategy
+    target_field: assay_type_code
+    value_mappings:
+      "WGS": "OBI:0002117"
+
+  - source_field: null
+    target_field: platform
+    source_label: null
+    default_value: "ILLUMINA"
+
+  - source_field: tba
+    target_field: instrument
+    default_value: OBI:0000759
+    value_mappings:
+      # need to add mappings for whichever models have been used for MOHCCN
+
+

@@ -1,0 +1,89 @@
+# MOHCCN Study - Sample Entity Mapping Configuration
+#
+# Target Entity: Sample (PCGL Base Schema)
+# Source: Example CSV export
+# Pattern: Direct mapping
+
+entity:
+  name: Sample
+  schema: [base]
+  source_files:
+    primary: "SampleRegistration.csv"
+  fields:
+    base:
+      - submitter_sample_id
+      - submitter_specimen_id
+      - molecule_type_code
+      - molecule_type_term
+      - sample_status
+
+  pattern: direct
+
+mappings:
+  # ---------------------------------------------------------------------------
+  # Sample Identifier
+  # Source: sample_id
+  # ---------------------------------------------------------------------------
+  - source_field: submitter_sample_id
+    target_field: submitter_sample_id
+  
+  # ---------------------------------------------------------------------------
+  # Specimen Identifier
+  # Links sample to parent specimen record
+  # Format: {participant_id}_specimen_{sample_id}
+  # ---------------------------------------------------------------------------
+  - source_field: submitter_specimen_id
+    target_field: submitter_specimen_id
+  
+  # ---------------------------------------------------------------------------
+  # Molecule Type Code
+  # ---------------------------------------------------------------------------
+  - source_field: sample_type
+    target_field: molecule_type_code
+    default_value: "NCIT:C17998"
+    value_mappings:
+      "Amplified DNA": "NCIT:C449"
+      "ctDNA": "NCIT:C449"
+      "Other DNA enrichments": "NCIT:C449"
+      "Other RNA fractions": "NCIT:C812"
+      "polyA+ RNA": "NCIT:C812"
+      "Protein": "NCIT:17021"
+      "rRNA-depleted RNA": "NCIT:C812"
+      "Total DNA": "NCIT:C449"
+      "Total RNA": "NCIT:C812"
+      "Whole cell - DNA": "NCIT:C449"
+      "Whole cell - protein": "NCIT:17021"
+      "Whole cell - RNA": "NCIT:C812"
+      "Whole cell (B-cell depleted)": "NCIT:C449"
+
+  
+  # ---------------------------------------------------------------------------
+  # Molecule Type Term
+  # ---------------------------------------------------------------------------
+  - source_field: sample_type
+    target_field: molecule_type_term
+    source_label: null
+    default_value: "Unknown"
+    value_mappings:
+      "Amplified DNA": "DNA"
+      "ctDNA": "DNA"
+      "Other DNA enrichments": "DNA"
+      "Other RNA fractions": "Ribonucleic Acid"
+      "polyA+ RNA": "Ribonucleic Acid"
+      "Protein": "Protein"
+      "rRNA-depleted RNA": "Ribonucleic Acid"
+      "Total DNA": "DNA"
+      "Total RNA": "Ribonucleic Acid"
+      "Whole cell - DNA": "DNA"
+      "Whole cell - protein": "Protein"
+      "Whole cell - RNA": "Ribonucleic Acid"
+      "Whole cell (B-cell depleted)": "DNA"
+  
+  # ---------------------------------------------------------------------------
+  # Sample Status
+  # Default: Case
+  # ---------------------------------------------------------------------------
+  - source_field: null
+    target_field: sample_status
+    source_label: null
+    default_value: "Case"

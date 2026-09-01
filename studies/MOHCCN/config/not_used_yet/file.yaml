@@ -1,0 +1,48 @@
+# File Entity Configuration Template
+#
+# PCGL Base Schema: File
+# All base fields are pre-defined below - customize source_field and source_label for your study
+
+entity:
+  name: File
+  source_files:
+    primary: "file.csv"        # Main data source
+
+  fields:
+    base:
+      - submitter_analysis_id
+      - fileName
+      - fileType
+      - fileAccess
+      - dataType
+
+  pattern: direct
+
+mappings:
+  - source_field: analysis_id
+    target_field: submitter_analysis_id
+    source_label: null
+
+  - source_field: main.name
+    target_field: fileName
+    source_label: null
+
+  - source_field: main.index
+    target_field: fileName
+    source_label: null
+
+  - source_field: #filename?
+    target_field: fileType
+    source_label: null
+    # need to transform from extracted file type
+
+  - source_field: null
+    target_field: fileAccess
+    source_label: null
+    default_value: "controlled"
+
+  - source_field: #fileName
+    target_field: dataType
+    source_label: null
+    # need to map from transform from extracted file type
+
