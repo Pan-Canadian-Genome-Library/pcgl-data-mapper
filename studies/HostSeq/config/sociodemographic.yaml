@@ -16,6 +16,7 @@ entity:
       - submitter_sociodem_id
       - submitter_participant_id
       - age_at_sociodem_collection
+      - age_at_sociodem_collection_missing_reason
       - sociodem_date_collection
       - race
       - race_another_racial_category
@@ -135,12 +136,16 @@ mappings:
   - source_field: age
     target_field: age_at_sociodem_collection
     target_type: age
-    source_label: "Source study enrollment date"
+    source_label: "age"
     params:
       birth_date_field: birth_date
       event_date_field: [enrollment_date, covid19_diagnosis_date, covid19_test_date, date_admission]
       age_fallback_field: age
-  
+
+  # age_at_sociodem_collection_missing_reason is not mapped from a source field;
+  # it is derived in EntityMapper.postprocess() based on whether
+  # age_at_sociodem_collection ends up missing (see core/mappers/base.py)
+
   # ---------------------------------------------------------------------------
   # Collection Date
   # ---------------------------------------------------------------------------
@@ -148,6 +153,7 @@ mappings:
     target_field: sociodem_date_collection
     source_label: "Source study enrollment date"
     target_type: date
+    default_value: "Missing - Unknown"
   
   # ---------------------------------------------------------------------------
   # Race (Not collected in HostSeq)
@@ -244,7 +250,7 @@ mappings:
       2: "High school (secondary school) diploma or equivalency certificate"
       3: "College, CEGEP, or other non-university certificate or diploma"
       4: "Bachelor's degree"
-      5: "Master's degree"
+      5: "Postgraduate degree or other professional designation (e.g., Master's. PhD, MD, DDS. DMD, DVM, OD)"
       -1: "Missing - Unknown"
     default_value: "Missing - Not provided"
   

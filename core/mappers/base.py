@@ -1840,7 +1840,22 @@ class EntityMapper:
                     f"PCGL data model rule: age_at_death nulled for non-deceased "
                     f"({has_age_before} → {has_age_after} records)"
                 )
-        
+
+        # age_at_sociodem_collection_missing_reason should only be populated when
+        # age_at_sociodem_collection is missing
+        if 'age_at_sociodem_collection' in df.columns and 'age_at_sociodem_collection_missing_reason' in df.columns:
+            missing_mask = df['age_at_sociodem_collection'].isna()
+            reason_before = df['age_at_sociodem_collection_missing_reason'].notna().sum()
+            df.loc[missing_mask, 'age_at_sociodem_collection_missing_reason'] = "Missing - Not collected"
+            df.loc[~missing_mask, 'age_at_sociodem_collection_missing_reason'] = None
+            reason_after = df['age_at_sociodem_collection_missing_reason'].notna().sum()
+
+            if reason_before != reason_after:
+                self.logger.info(
+                    f"PCGL data model rule: age_at_sociodem_collection_missing_reason set for missing age "
+                    f"({reason_before} → {reason_after} records)"
+                )
+
         return df
     
     def validate_mapped_data(self, mapped_df: pd.DataFrame) -> List[str]:
