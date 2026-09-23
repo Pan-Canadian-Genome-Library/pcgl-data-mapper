@@ -1689,7 +1689,8 @@ class EntityMapper:
             
             elif target_type == 'date':
                 participant_id_field = self.config.filters.get('participant_id_field', 'participant_id')
-                apply_date_to_record(record, target_field, source_row, source_field, participant_id_field)
+                has_default = 'default_value' in field_config
+                apply_date_to_record(record, target_field, source_row, source_field, participant_id_field, default_value, has_default)
             
             elif target_type == 'duration':
                 params = field_config.get('params', {})

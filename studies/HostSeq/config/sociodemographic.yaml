@@ -449,8 +449,7 @@ validations:
   # Sociodem ID is required
   - type: required
     field: submitter_sociodem_id
-  - type: required
-    field: sociodem_date_collection
+
 
 # =============================================================================
 # POST-PROCESSING STEPS
