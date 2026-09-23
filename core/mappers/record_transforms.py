@@ -338,31 +338,39 @@ def apply_date_to_record(
     target_field: str,
     source_row: pd.Series,
     source_field: Optional[Union[str, List[str]]],
-    participant_id_field: Optional[str] = None
+    participant_id_field: Optional[str] = None,
+    default_value: Any = None,
+    has_default: bool = False
 ) -> None:
     """
     Apply date formatting to a single record.
-    
+
     Converts date values to PCGL standard format (YYYY-MM-DD).
     If source_field is a list, tries each field sequentially and uses the first non-null, parseable date.
-    
+    If no date can be resolved (missing source, or unparseable value) and has_default is True,
+    the field is set to default_value instead of being left null.
+
     Args:
         record: Record dictionary to update (modified in place)
         target_field: Target field name
         source_row: Source data row
         source_field: Source field name or list of field names to try sequentially
         participant_id_field: Optional field name for participant ID (for context in warnings)
+        default_value: Value to use when no date can be populated
+        has_default: Whether default_value was explicitly provided (allows default_value: null)
     """
     if not source_field:
+        if has_default:
+            record[target_field] = default_value
         return
-    
+
     # Build context for better error messages
     context = {'target_field': target_field}
     if participant_id_field and participant_id_field in source_row.index:
         pid = source_row.get(participant_id_field)
         if pd.notna(pid):
             context['participant_id'] = pid
-    
+
     # Handle source_field as list - try each field sequentially
     if isinstance(source_field, list):
         for field_name in source_field:
@@ -377,12 +385,20 @@ def apply_date_to_record(
                     logger.debug(f"{ctx}Using date from field: {field_name}='{formatted_date}'")
                     return
         # No valid date found in any field
+        if has_default:
+            record[target_field] = default_value
         return
     else:
         # Single field
         date_value = source_row.get(source_field)
         if pd.notna(date_value):
-            record[target_field] = format_date_to_pcgl(date_value, context=context)
+            formatted_date = format_date_to_pcgl(date_value, context=context)
+            if formatted_date is not None:
+                record[target_field] = formatted_date
+                return
+        # No date value, or it failed to parse
+        if has_default:
+            record[target_field] = default_value
 
 
 def apply_duration_to_record(
