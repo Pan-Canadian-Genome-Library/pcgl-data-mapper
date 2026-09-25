@@ -83,16 +83,22 @@ preprocessing:
     fields: [height]
 
   # pregnancy_weeks may be recorded as "<weeks> , <days> days" (e.g. "9 , 3 days")
-  # instead of a plain number - convert to decimal weeks (weeks + days/7)
+  # instead of a plain number - convert to decimal weeks (weeks + days/7).
+  # astype("str") guards against the column being all-empty, which pandas reads
+  # as float64 (no .str accessor); astype("float64")/round must use quoted
+  # dtype names, not the bare float/str builtins, which eval() can't resolve.
   - type: calculate_field
     target: pregnancy_weeks_wk_part
-    formula: 'pregnancy_weeks.str.extract(r"(\d+)")[0].astype("float64")'
+    formula: 'pregnancy_weeks.astype("str").str.extract(r"(\d+)")[0].astype("float64")'
   - type: calculate_field
     target: pregnancy_weeks_day_part
-    formula: 'pregnancy_weeks.str.extract(r",\s*(\d+)")[0].astype("float64")'
+    formula: 'pregnancy_weeks.astype("str").str.extract(r",\s*(\d+)")[0].astype("float64")'
+  - type: calculate_field
+    target: pregnancy_weeks_raw
+    formula: 'pregnancy_weeks_wk_part + pregnancy_weeks_day_part.fillna(0) / 7'
   - type: calculate_field
     target: pregnancy_weeks_clean
-    formula: '(pregnancy_weeks_wk_part + pregnancy_weeks_day_part.fillna(0) / 7).round(2)'
+    formula: 'pregnancy_weeks_raw.round(2)'
 
 # =============================================================================
 # PREPROCESSING FILTERS
