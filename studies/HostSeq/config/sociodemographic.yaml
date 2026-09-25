@@ -73,6 +73,27 @@ preprocessing:
       event_date_field: [enrollment_date, covid19_diagnosis_date, covid19_test_date, date_admission]
       age_field: age
 
+  # height may contain non-numeric placeholder text (e.g. "na") instead of a number
+  - type: lowercase
+    fields: [height]
+  - type: replace_missing_codes
+    fields: [height]
+    codes: ['na']
+  - type: convert_to_numeric
+    fields: [height]
+
+  # pregnancy_weeks may be recorded as "<weeks> , <days> days" (e.g. "9 , 3 days")
+  # instead of a plain number - convert to decimal weeks (weeks + days/7)
+  - type: calculate_field
+    target: pregnancy_weeks_wk_part
+    formula: 'pregnancy_weeks.str.extract(r"(\d+)")[0].astype("float64")'
+  - type: calculate_field
+    target: pregnancy_weeks_day_part
+    formula: 'pregnancy_weeks.str.extract(r",\s*(\d+)")[0].astype("float64")'
+  - type: calculate_field
+    target: pregnancy_weeks_clean
+    formula: '(pregnancy_weeks_wk_part + pregnancy_weeks_day_part.fillna(0) / 7).round(2)'
+
 # =============================================================================
 # PREPROCESSING FILTERS
 # =============================================================================
@@ -189,6 +210,7 @@ mappings:
   - source_field: gender_desc
     target_field: gender_another_gender
     source_label: "Please describe your gender"
+    default_value: "Missing - Not provided"
   
   - source_field: null
     target_field: gender_collect_method
@@ -433,7 +455,7 @@ mappings:
       0: "No"
       1: "Yes"
   
-  - source_field: pregnancy_weeks
+  - source_field: pregnancy_weeks_clean
     target_field: pregnancy_weeks
     source_label: "Pregnancy weeks"
 
@@ -458,3 +480,25 @@ post_processing:
   # Convert age fields to nullable integer
   - type: convert_nullable_int
     columns: [dob_year, age_at_sociodem_collection, household_size]
+
+  # age_at_sociodem_collection_missing_reason should only be populated when
+  # age_at_sociodem_collection is missing
+  - type: conditional_field
+    target_field: age_at_sociodem_collection_missing_reason
+    condition:
+      field: age_at_sociodem_collection
+      op: is_null
+    if_true: "Missing - Not collected"
+    if_false: null
+
+  # gender_another_gender should only be populated when gender is 'Another Gender'.
+  # (The "required but missing" case is handled by the gender_another_gender
+  # mapping's own default_value above, applied at mapping time.)
+  - type: conditional_field
+    target_field: gender_another_gender
+    condition:
+      field: gender
+      op: equals
+      value: "Another Gender"
+    if_true: keep
+    if_false: null

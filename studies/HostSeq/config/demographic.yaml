@@ -201,3 +201,13 @@ post_processing:
   # This preserves integer display while allowing null values
   - type: convert_nullable_int
     columns: auto  # Auto-detect columns with 'age' in name
+
+  # age_at_death should only be populated when vital_status is 'Deceased'
+  - type: conditional_field
+    target_field: age_at_death
+    condition:
+      field: vital_status
+      op: equals
+      value: "Deceased"
+    if_true: keep
+    if_false: null

@@ -1827,35 +1827,41 @@ class EntityMapper:
                         df = convert_nullable_int_columns(df, auto_detect=True)
                     else:
                         df = convert_nullable_int_columns(df, int_columns=columns, auto_detect=False)
-        
-        # Apply PCGL data model conditional field rules
-        # age_at_death should only be populated when vital_status is 'Deceased'
-        if 'vital_status' in df.columns and 'age_at_death' in df.columns:
-            has_age_before = df['age_at_death'].notna().sum()
-            deceased_mask = df['vital_status'] == 'Deceased'
-            df.loc[~deceased_mask, 'age_at_death'] = None
-            has_age_after = df['age_at_death'].notna().sum()
-            
-            if has_age_before > has_age_after:
-                self.logger.info(
-                    f"PCGL data model rule: age_at_death nulled for non-deceased "
-                    f"({has_age_before} → {has_age_after} records)"
-                )
 
-        # age_at_sociodem_collection_missing_reason should only be populated when
-        # age_at_sociodem_collection is missing
-        if 'age_at_sociodem_collection' in df.columns and 'age_at_sociodem_collection_missing_reason' in df.columns:
-            missing_mask = df['age_at_sociodem_collection'].isna()
-            reason_before = df['age_at_sociodem_collection_missing_reason'].notna().sum()
-            df.loc[missing_mask, 'age_at_sociodem_collection_missing_reason'] = "Missing - Not collected"
-            df.loc[~missing_mask, 'age_at_sociodem_collection_missing_reason'] = None
-            reason_after = df['age_at_sociodem_collection_missing_reason'].notna().sum()
+                elif step_type == 'conditional_field':
+                    # Set target_field based on a condition evaluated against another field:
+                    #   if_true: value to use where the condition holds ('keep' = leave as mapped)
+                    #   if_false: value to use where it doesn't ('keep' = leave as mapped)
+                    # condition supports the same operators/any/all nesting as row filters.
+                    target = step.get('target_field')
+                    condition = step.get('condition')
 
-            if reason_before != reason_after:
-                self.logger.info(
-                    f"PCGL data model rule: age_at_sociodem_collection_missing_reason set for missing age "
-                    f"({reason_before} → {reason_after} records)"
-                )
+                    if not target or not condition:
+                        self.logger.warning(f"Skipping incomplete conditional_field step: {step}")
+                        continue
+                    if target not in df.columns:
+                        self.logger.warning(f"conditional_field: target_field '{target}' not found, skipping")
+                        continue
+
+                    matched_df, _, _ = self._apply_filters(df, [condition], "post-processing")
+                    condition_mask = df.index.isin(matched_df.index)
+
+                    if_true = step.get('if_true', 'keep')
+                    if_false = step.get('if_false', 'keep')
+
+                    before_count = df[target].notna().sum()
+
+                    if if_true != 'keep':
+                        df.loc[condition_mask, target] = if_true
+                    if if_false != 'keep':
+                        df.loc[~condition_mask, target] = if_false
+
+                    after_count = df[target].notna().sum()
+                    if before_count != after_count:
+                        self.logger.info(
+                            f"PCGL data model rule: conditional_field '{target}' applied "
+                            f"({before_count} → {after_count} non-null records)"
+                        )
 
         return df
     
